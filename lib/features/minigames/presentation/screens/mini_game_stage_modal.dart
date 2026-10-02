@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/contracts/mini_game_contract.dart';
-import '../../../../core/utils/haptic_utils.dart';
+import 'package:loverscat/core/constants/app_colors.dart';
+import 'package:loverscat/core/contracts/mini_game_contract.dart';
+import 'package:loverscat/core/utils/haptic_utils.dart';
 import '../controllers/mini_game_registry.dart';
 
 /// Interactive modal presented upon reaching an island stage.
@@ -53,7 +53,7 @@ class MiniGameStageModal extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
-                      '${meta.islandNumber}. Ada: ${meta.islandName}',
+                      '${meta.id.islandNumber}. Ada: ${meta.islandName}',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,

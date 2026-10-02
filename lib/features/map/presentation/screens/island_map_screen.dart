@@ -11,6 +11,8 @@ import '../controllers/map_providers.dart';
 import '../widgets/boat_sailing_dialog.dart';
 import '../widgets/snakes_ladders_board_widget.dart';
 import 'grand_victory_screen.dart';
+import 'package:loverscat/features/minigames/fire_water/presentation/screens/fire_water_game_screen.dart';
+import 'package:loverscat/features/minigames/presentation/screens/mini_game_stage_modal.dart';
 
 /// Main Island Map & Snakes and Ladders board screen.
 /// Minimalist design showing ONLY the 6x8 game board with tactile checkers piece
@@ -126,6 +128,109 @@ class _IslandMapScreenState extends ConsumerState<IslandMapScreen> {
     );
   }
 
+  void _openMiniGame(BuildContext context, int islandNumber) {
+    HapticUtils.medium();
+    if (islandNumber == 2) {
+      FireWaterGameScreen.open(context);
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => MiniGameStageModal(
+          islandNumber: islandNumber,
+          onContinue: () async {
+            await ref.read(mapGameProvider.notifier).completeMiniGame(islandNumber);
+          },
+        ),
+      );
+    }
+  }
+
+  Widget _buildIslandProgressBanner(MapState mapState) {
+    final island = mapState.currentIsland;
+    final isCompleted = mapState.completedIslands.contains(island);
+    final solvedCount = mapState.getQuestionsSolved(island);
+    final isMiniGameReady = mapState.isMiniGameUnlocked(island);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: isMiniGameReady ? const Color(0xFFE8F5E9) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isMiniGameReady ? const Color(0xFF66BB6A) : const Color(0xFFE0E0E0),
+          width: 1.5,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0C000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Text(isMiniGameReady ? '🎮' : '📝', style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isCompleted
+                      ? '$island. Ada (Serbest Oyun Açık)'
+                      : (isMiniGameReady
+                          ? '$island. Ada: Mini Oyun Açıldı! 🎮'
+                          : '$island. Ada: $solvedCount/10 Soru Çözüldü'),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.bold,
+                    color: isMiniGameReady ? const Color(0xFF2E7D32) : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: isMiniGameReady ? 1.0 : (solvedCount / 10.0).clamp(0.0, 1.0),
+                    minHeight: 5,
+                    backgroundColor: const Color(0xFFEEEEEE),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isMiniGameReady ? const Color(0xFF4CAF50) : const Color(0xFFFFA000),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton(
+            onPressed: () {
+              if (isMiniGameReady) {
+                _openMiniGame(context, island);
+              } else {
+                _showQuizModePicker(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isMiniGameReady ? const Color(0xFF2E7D32) : AppColors.player1Badge,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              isMiniGameReady ? 'Oyna 🕹️' : 'Test Çöz 🎯',
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mapState = ref.watch(mapGameProvider);
@@ -189,6 +294,10 @@ class _IslandMapScreenState extends ConsumerState<IslandMapScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           child: Column(
             children: [
+              // 0. 10-Question Progress & Mini Game Header
+              _buildIslandProgressBanner(mapState),
+              const SizedBox(height: 8),
+
               // 1. 6x8 Snakes & Ladders Board with Dama Taşı Tokens
               Expanded(
                 child: Center(

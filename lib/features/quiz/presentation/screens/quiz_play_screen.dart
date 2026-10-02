@@ -198,11 +198,18 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
     }
   }
 
-  void _awardSteps(int p1Steps, int p2Steps) {
-    if (!_stepsAwarded && (p1Steps > 0 || p2Steps > 0)) {
-      ref.read(mapGameProvider.notifier).addPlayerSteps(
-        player1Steps: p1Steps,
-        player2Steps: p2Steps,
+  void _awardSteps(int p1Steps, int p2Steps, int totalQuestionsSolved) {
+    if (!_stepsAwarded) {
+      if (p1Steps > 0 || p2Steps > 0) {
+        ref.read(mapGameProvider.notifier).addPlayerSteps(
+          player1Steps: p1Steps,
+          player2Steps: p2Steps,
+        );
+      }
+      final currentIsland = ref.read(mapGameProvider).currentIsland;
+      ref.read(mapGameProvider.notifier).recordQuestionsSolved(
+        currentIsland,
+        totalQuestionsSolved,
       );
       _stepsAwarded = true;
     }
@@ -317,11 +324,19 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
         couple: couple,
         mapState: ref.watch(mapGameProvider),
         onAwardAndPop: () {
-          _awardSteps(gameState.player1Score, gameState.player2Score);
+          _awardSteps(
+            gameState.player1Score,
+            gameState.player2Score,
+            gameState.questions.length,
+          );
           Navigator.of(context).pop();
         },
         onRestart: () {
-          _awardSteps(gameState.player1Score, gameState.player2Score);
+          _awardSteps(
+            gameState.player1Score,
+            gameState.player2Score,
+            gameState.questions.length,
+          );
           setState(() {
             _stepsAwarded = false;
           });

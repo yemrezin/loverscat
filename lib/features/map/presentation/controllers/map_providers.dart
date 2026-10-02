@@ -21,6 +21,7 @@ class MapState {
   final Set<int> completedIslands;
   final Map<int, int> islandP1Positions;
   final Map<int, int> islandP2Positions;
+  final Map<int, int> islandQuestionsSolved; // islandNum -> questions solved count
   final Map<int, IslandBet> islandBets;
   final Map<int, String> islandWinners; // islandNum -> winner nickname
   final String? winningPlayerName;
@@ -42,12 +43,18 @@ class MapState {
     this.completedIslands = const {},
     this.islandP1Positions = const {},
     this.islandP2Positions = const {},
+    this.islandQuestionsSolved = const {},
     this.islandBets = const {},
     this.islandWinners = const {},
     this.winningPlayerName,
     this.winningIslandBet,
     this.lastActionMessage,
   });
+
+  int getQuestionsSolved(int island) => islandQuestionsSolved[island] ?? 0;
+  bool isIslandQuestionsCompleted(int island) => (islandQuestionsSolved[island] ?? 0) >= 10;
+  bool isMiniGameUnlocked(int island) =>
+      completedIslands.contains(island) || ((islandQuestionsSolved[island] ?? 0) >= 10);
 
   /// Legacy compatibility getter for Player 1 position
   int get playerPosition => player1Position;
@@ -75,6 +82,7 @@ class MapState {
     Set<int>? completedIslands,
     Map<int, int>? islandP1Positions,
     Map<int, int>? islandP2Positions,
+    Map<int, int>? islandQuestionsSolved,
     Map<int, int>? islandPositions, // Legacy support
     Map<int, IslandBet>? islandBets,
     Map<int, String>? islandWinners,
@@ -99,6 +107,7 @@ class MapState {
       completedIslands: completedIslands ?? this.completedIslands,
       islandP1Positions: islandPositions ?? (islandP1Positions ?? this.islandP1Positions),
       islandP2Positions: islandP2Positions ?? this.islandP2Positions,
+      islandQuestionsSolved: islandQuestionsSolved ?? this.islandQuestionsSolved,
       islandBets: islandBets ?? this.islandBets,
       islandWinners: islandWinners ?? this.islandWinners,
       winningPlayerName: clearWinningDialog ? null : (winningPlayerName ?? this.winningPlayerName),
@@ -119,6 +128,7 @@ class MapNotifier extends StateNotifier<MapState> {
   static const _completedKey = 'paws_map_completed_v3';
   static const _winnersKey = 'paws_map_winners_v3';
   static const _betsKey = 'paws_map_bets_v3';
+  static const _questionsKey = 'paws_map_questions_v3';
 
   Future<void>? loadFuture;
 
@@ -154,19 +164,27 @@ class MapNotifier extends StateNotifier<MapState> {
         bets = decoded.map((k, v) => MapEntry(int.tryParse(k) ?? 1, IslandBet.fromMap(v as Map<String, dynamic>)));
       }
 
+      final questionsRaw = prefs.getString(_questionsKey);
+      Map<int, int> questionsMap = {};
+      if (questionsRaw != null) {
+        final decoded = jsonDecode(questionsRaw) as Map<String, dynamic>;
+        questionsMap = decoded.map((k, v) => MapEntry(int.tryParse(k) ?? 1, (v as num).toInt()));
+      }
+
       state = state.copyWith(
-        currentIsland: island.clamp(1, 10),
-        maxUnlockedIsland: maxUnlocked.clamp(1, 10),
-        shipIsland: ship.clamp(1, 10),
+        currentIsland: max(island, state.currentIsland).clamp(1, 10),
+        maxUnlockedIsland: max(maxUnlocked, state.maxUnlockedIsland).clamp(1, 10),
+        shipIsland: max(ship, state.shipIsland).clamp(1, 10),
         player1Position: p1Pos.clamp(1, SnakesAndLaddersConfig.totalSquares),
         player2Position: p2Pos.clamp(1, SnakesAndLaddersConfig.totalSquares),
         player1Steps: p1Steps,
         player2Steps: p2Steps,
-        completedIslands: completed,
-        islandWinners: winners,
-        islandBets: bets,
+        completedIslands: {...completed, ...state.completedIslands},
+        islandWinners: {...winners, ...state.islandWinners},
+        islandBets: {...bets, ...state.islandBets},
+        islandQuestionsSolved: {...questionsMap, ...state.islandQuestionsSolved},
         hasReachedIslandGoal: p1Pos >= SnakesAndLaddersConfig.totalSquares || p2Pos >= SnakesAndLaddersConfig.totalSquares,
-        hasCompletedAll10Islands: completed.contains(10) || (island >= 10 && (p1Pos >= SnakesAndLaddersConfig.totalSquares || p2Pos >= SnakesAndLaddersConfig.totalSquares)),
+        hasCompletedAll10Islands: completed.contains(10) || state.completedIslands.contains(10) || (island >= 10 && (p1Pos >= SnakesAndLaddersConfig.totalSquares || p2Pos >= SnakesAndLaddersConfig.totalSquares)),
       );
     } catch (_) {}
   }
@@ -191,6 +209,9 @@ class MapNotifier extends StateNotifier<MapState> {
 
       final betsMap = state.islandBets.map((k, v) => MapEntry(k.toString(), v.toMap()));
       await prefs.setString(_betsKey, jsonEncode(betsMap));
+
+      final qMap = state.islandQuestionsSolved.map((k, v) => MapEntry(k.toString(), v));
+      await prefs.setString(_questionsKey, jsonEncode(qMap));
     } catch (_) {}
   }
 
@@ -227,6 +248,44 @@ class MapNotifier extends StateNotifier<MapState> {
       lastActionMessage: 'Quizden 1. Oyuncu +$player1Steps, 2. Oyuncu +$player2Steps adım kazandı! 🐾',
     );
     _saveProgress();
+  }
+
+  void recordQuestionsSolved(int islandNum, int count) {
+    if (count <= 0) return;
+    final current = state.islandQuestionsSolved[islandNum] ?? 0;
+    final updatedMap = Map<int, int>.from(state.islandQuestionsSolved);
+    final newTotal = current + count;
+    updatedMap[islandNum] = newTotal;
+
+    String? msg;
+    if (newTotal >= 10 && current < 10) {
+      msg = '🎉 $islandNum. Adanın 10 sorusu tamamlandı! Mini Oyun açıldı! 🎮';
+    } else {
+      msg = '📝 $islandNum. Adada +$count soru çözüldü ($newTotal/10)!';
+    }
+
+    state = state.copyWith(
+      islandQuestionsSolved: updatedMap,
+      lastActionMessage: msg,
+    );
+    _saveProgress();
+  }
+
+  Future<void> completeMiniGame(int islandNum) async {
+    final updatedCompleted = Set<int>.from(state.completedIslands)..add(islandNum);
+    final nextIsland = islandNum + 1;
+    final nextMax = min(10, max(state.maxUnlockedIsland, nextIsland));
+
+    state = state.copyWith(
+      completedIslands: updatedCompleted,
+      maxUnlockedIsland: nextMax,
+      lastActionMessage: '🏆 $islandNum. Adanın Mini Oyunu tamamlandı! Harika iş birliği!',
+    );
+    _saveProgress();
+
+    if (islandNum == state.currentIsland && islandNum < 10) {
+      await sailToNextIsland();
+    }
   }
 
   /// Legacy compatibility method
@@ -416,6 +475,7 @@ class MapNotifier extends StateNotifier<MapState> {
       completedIslands: {},
       islandP1Positions: {},
       islandP2Positions: {},
+      islandQuestionsSolved: {},
       islandBets: {},
       islandWinners: {},
     );

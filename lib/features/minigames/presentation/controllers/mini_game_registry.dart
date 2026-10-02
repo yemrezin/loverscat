@@ -1,4 +1,4 @@
-import '../../../core/contracts/mini_game_contract.dart';
+import 'package:loverscat/core/contracts/mini_game_contract.dart';
 
 /// Registry maintaining all 10 island mini-game definitions and future hooks.
 /// Follows Open/Closed Principle (OCP) - new mini-games can be plugged in seamlessly.
@@ -14,13 +14,14 @@ class MiniGameRegistry {
       storyClue: 'İlk adada minik hasır şapkasının izi bulundu!',
     ),
     2: const MiniGameMetadata(
-      id: MiniGameId.syrupWoodsArchery,
+      id: MiniGameId.fireAndWater,
       islandName: 'Syrup Woods',
-      description: 'Rüzgar açısını ve yay mesafesini hesaplayarak hareketli hedefleri vurun!',
-      controlGuide: 'Yayı geriye doğru çekip rüzgar göstergesine göre nişan alın.',
+      description: 'Ateş ve Su tapınağı! Karakterleri yönlendirip engelleri ve havuzları aşın, kapılara ulaşın!',
+      controlGuide: 'Sol/Sağ ve Zıpla ile hareket edin; karakter değiştirerek butonları açın.',
       droppedChildItemName: 'Ahşap Korsan Dürbünü',
       droppedChildItemIcon: '🔭',
-      storyClue: 'Ormanın derinliklerinde oyuncak dürbününü düşürmüş!',
+      storyClue: 'Ateş ve Su tapınağında minik kızın düşürdüğü oyuncak dürbün bulundu!',
+      isReadyForPlay: true,
     ),
     3: const MiniGameMetadata(
       id: MiniGameId.baratieAirHockey,

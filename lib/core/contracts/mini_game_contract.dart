@@ -18,7 +18,7 @@ enum MiniGameMode {
 /// The 10 canonical mini-games corresponding to each island in "Aşkın Uçan Rotası".
 enum MiniGameId {
   shellsCoveBallDrop(1, 'Üstten Top Atma', MiniGameMode.competitive1v1),
-  syrupWoodsArchery(2, 'Okçuluk Düellosu', MiniGameMode.competitive1v1),
+  fireAndWater(2, 'Ateş ve Su', MiniGameMode.cooperative),
   baratieAirHockey(3, 'Air Hokeyi', MiniGameMode.competitive1v1),
   arlongHotPotato(4, 'Bomba Paslamaca', MiniGameMode.mixed),
   drumMemoryMatch(5, 'Hafıza Oyunu', MiniGameMode.sequential),
