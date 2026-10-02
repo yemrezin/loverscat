@@ -1,89 +1,23 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:loverscat/features/pet/domain/models/pet_avatar.dart';
 import 'package:loverscat/features/pet/presentation/controllers/pet_providers.dart';
 import 'package:loverscat/features/profile/domain/models/friend_request.dart';
 import 'package:loverscat/features/profile/domain/models/user_profile.dart';
 import 'package:loverscat/features/quiz/domain/models/question.dart';
+import '../data/online_api_client.dart';
+import '../data/online_socket_client.dart';
+import '../models/online_state.dart';
+import 'online_message_processor.dart';
 
-class OnlineState {
-  final UserProfile user;
-  final UserProfile? partner;
-  final bool isLoggedIn;
-  final bool isConnected;
-  final bool isConnecting;
-  final String serverUrl;
-  final List<FriendRequest> incomingRequests;
-  final List<FriendRequest> sentRequests;
-  final String? lastError;
-  final String? statusMessage;
-  final Map<String, dynamic>? lastGameAction;
-  final bool isSelfReady;
-  final bool isPartnerReady;
-
-  const OnlineState({
-    required this.user,
-    this.partner,
-    this.isLoggedIn = false,
-    this.isConnected = false,
-    this.isConnecting = false,
-    required this.serverUrl,
-    this.incomingRequests = const [],
-    this.sentRequests = const [],
-    this.lastError,
-    this.statusMessage,
-    this.lastGameAction,
-    this.isSelfReady = false,
-    this.isPartnerReady = false,
-  });
-
-  bool get isPaired => partner != null && user.partnerUsername != null;
-
-  OnlineState copyWith({
-    UserProfile? user,
-    UserProfile? partner,
-    bool clearPartner = false,
-    bool? isLoggedIn,
-    bool? isConnected,
-    bool? isConnecting,
-    String? serverUrl,
-    List<FriendRequest>? incomingRequests,
-    List<FriendRequest>? sentRequests,
-    String? lastError,
-    bool clearError = false,
-    String? statusMessage,
-    bool clearStatus = false,
-    Map<String, dynamic>? lastGameAction,
-    bool? isSelfReady,
-    bool? isPartnerReady,
-  }) {
-    return OnlineState(
-      user: user ?? this.user,
-      partner: clearPartner ? null : (partner ?? this.partner),
-      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
-      isConnected: isConnected ?? this.isConnected,
-      isConnecting: isConnecting ?? this.isConnecting,
-      serverUrl: serverUrl ?? this.serverUrl,
-      incomingRequests: incomingRequests ?? this.incomingRequests,
-      sentRequests: sentRequests ?? this.sentRequests,
-      lastError: clearError ? null : (lastError ?? this.lastError),
-      statusMessage: clearStatus ? null : (statusMessage ?? this.statusMessage),
-      lastGameAction: lastGameAction ?? this.lastGameAction,
-      isSelfReady: isSelfReady ?? this.isSelfReady,
-      isPartnerReady: isPartnerReady ?? this.isPartnerReady,
-    );
-  }
-}
-
+export '../models/online_state.dart';
 
 class OnlineController extends StateNotifier<OnlineState> {
   static const _profileKey = 'loverscat_user_profile_v2';
+
   static String get defaultLocalUrl {
     if (kIsWeb) {
       final host = Uri.base.host;
@@ -95,11 +29,12 @@ class OnlineController extends StateNotifier<OnlineState> {
   }
 
   final Ref _ref;
-  WebSocketChannel? _channel;
-  StreamSubscription? _channelSub;
+  final OnlineSocketClient _socketClient = OnlineSocketClient();
   Timer? _reconnectTimer;
   Timer? _syncTimer;
   bool _disposed = false;
+
+  OnlineApiClient get _apiClient => OnlineApiClient(state.serverUrl);
 
   OnlineController(this._ref)
       : super(OnlineState(
@@ -122,12 +57,7 @@ class OnlineController extends StateNotifier<OnlineState> {
 
       if (savedProfileStr != null) {
         final userProfile = UserProfile.fromJson(savedProfileStr);
-        state = state.copyWith(
-          user: userProfile,
-          partner: userProfile.partnerProfile,
-          isLoggedIn: true,
-        );
-
+        state = state.copyWith(user: userProfile, partner: userProfile.partnerProfile, isLoggedIn: true);
         _syncCouplePlayersWithOnlineProfiles();
         if (!_isInTest) {
           connect();
@@ -145,9 +75,7 @@ class OnlineController extends StateNotifier<OnlineState> {
     _syncTimer?.cancel();
     if (_isInTest || !state.isLoggedIn) return;
     _syncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (state.isLoggedIn && !_disposed) {
-        fetchRequests();
-      }
+      if (state.isLoggedIn && !_disposed) fetchRequests();
     });
   }
 
@@ -158,10 +86,7 @@ class OnlineController extends StateNotifier<OnlineState> {
         : const PetAvatar(type: PetType.rabbit, name: 'Bekleniyor...');
 
     _ref.read(couplePlayersProvider.notifier).setPlayers(
-          CouplePlayers(
-            player1: myAvatar,
-            player2: partnerAvatar,
-          ),
+          CouplePlayers(player1: myAvatar, player2: partnerAvatar),
         );
   }
 
@@ -172,7 +97,7 @@ class OnlineController extends StateNotifier<OnlineState> {
     return '$scheme://${uri.host}$portString';
   }
 
-  // --- Authentication (SQL Backend) ---
+  // --- Authentication ---
 
   Future<bool> register({
     required String username,
@@ -181,52 +106,31 @@ class OnlineController extends StateNotifier<OnlineState> {
     String petName = 'Mırmır',
   }) async {
     state = state.copyWith(isConnecting: true, clearError: true);
-    try {
-      final cleanUsername = username.trim().toLowerCase().replaceFirst(RegExp(r'^@'), '');
-      final uri = Uri.parse('${state.serverUrl}/api/register');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': cleanUsername,
-          'password': password,
-          'petType': petType.name,
-          'petName': petName,
-        }),
-      );
+    final result = await _apiClient.register(
+      username: username,
+      password: password,
+      petType: petType,
+      petName: petName,
+    );
 
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        final profile = UserProfile.fromMap(data['user'] as Map<String, dynamic>);
-        await _saveProfile(profile);
-
-        state = state.copyWith(
-          user: profile,
-          isLoggedIn: true,
-          isConnecting: false,
-          statusMessage: 'Kayıt başarılı! Hoş geldin @${profile.username} ✨',
-        );
-
-        _syncCouplePlayersWithOnlineProfiles();
-        if (!_isInTest) {
-          connect();
-          _startSyncTimer();
-        }
-        return true;
-      } else {
-        state = state.copyWith(
-          isConnecting: false,
-          lastError: data['error'] as String? ?? 'Kayıt işlemi başarısız oldu.',
-        );
-        return false;
-      }
-    } catch (e) {
+    if (result.success && result.data != null) {
+      final profile = result.data!;
+      await _saveProfile(profile);
       state = state.copyWith(
+        user: profile,
+        isLoggedIn: true,
         isConnecting: false,
-        lastError: 'Sunucuya bağlanılamadı. Lütfen sunucunun açık olduğundan emin olun.',
+        statusMessage: 'Kayıt başarılı! Hoş geldin @${profile.username} ✨',
       );
-      return false;
+      _syncCouplePlayersWithOnlineProfiles();
+      if (!_isInTest) {
+        connect();
+        _startSyncTimer();
+      }
+      return true;
     }
+    state = state.copyWith(isConnecting: false, lastError: result.error ?? 'Kayıt işlemi başarısız oldu.');
+    return false;
   }
 
   Future<bool> login({
@@ -234,50 +138,26 @@ class OnlineController extends StateNotifier<OnlineState> {
     required String password,
   }) async {
     state = state.copyWith(isConnecting: true, clearError: true);
-    try {
-      final cleanUsername = username.trim().toLowerCase().replaceFirst(RegExp(r'^@'), '');
-      final uri = Uri.parse('${state.serverUrl}/api/login');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': cleanUsername,
-          'password': password,
-        }),
-      );
+    final result = await _apiClient.login(username: username, password: password);
 
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        final profile = UserProfile.fromMap(data['user'] as Map<String, dynamic>);
-        await _saveProfile(profile);
-
-        state = state.copyWith(
-          user: profile,
-          isLoggedIn: true,
-          isConnecting: false,
-          statusMessage: 'Giriş başarılı! Hoş geldin @${profile.username} 🐾',
-        );
-
-        _syncCouplePlayersWithOnlineProfiles();
-        if (!_isInTest) {
-          connect();
-          _startSyncTimer();
-        }
-        return true;
-      } else {
-        state = state.copyWith(
-          isConnecting: false,
-          lastError: data['error'] as String? ?? 'Kullanıcı adı veya şifre hatalı.',
-        );
-        return false;
-      }
-    } catch (e) {
+    if (result.success && result.data != null) {
+      final profile = result.data!;
+      await _saveProfile(profile);
       state = state.copyWith(
+        user: profile,
+        isLoggedIn: true,
         isConnecting: false,
-        lastError: 'Sunucuya bağlanılamadı. Lütfen sunucunun açık olduğundan emin olun.',
+        statusMessage: 'Giriş başarılı! Hoş geldin @${profile.username} 🐾',
       );
-      return false;
+      _syncCouplePlayersWithOnlineProfiles();
+      if (!_isInTest) {
+        connect();
+        _startSyncTimer();
+      }
+      return true;
     }
+    state = state.copyWith(isConnecting: false, lastError: result.error ?? 'Kullanıcı adı veya şifre hatalı.');
+    return false;
   }
 
   Future<void> logout() async {
@@ -285,9 +165,7 @@ class OnlineController extends StateNotifier<OnlineState> {
     await prefs.remove(_profileKey);
     _syncTimer?.cancel();
     _reconnectTimer?.cancel();
-    _channelSub?.cancel();
-    _channel?.sink.close();
-    _channel = null;
+    _socketClient.dispose();
 
     state = OnlineState(
       user: UserProfile.defaultProfile(),
@@ -302,278 +180,49 @@ class OnlineController extends StateNotifier<OnlineState> {
 
   Future<void> connect() async {
     if (_disposed || _isInTest || !state.isLoggedIn) return;
-    _channelSub?.cancel();
-    _channel?.sink.close();
-
     state = state.copyWith(isConnecting: true, clearError: true);
 
-    try {
-      final wsUri = Uri.parse(_wsUrl);
-      final channel = WebSocketChannel.connect(wsUri);
-      _channel = channel;
-
-      _channelSub = channel.stream.listen(
-        (data) {
-          _handleMessage(data.toString());
-        },
-        onDone: () {
-          debugPrint('[OnlineController] WebSocket closed.');
-          state = state.copyWith(isConnected: false, isConnecting: false);
-          _scheduleReconnect();
-        },
-        onError: (err) {
-          debugPrint('[OnlineController] WebSocket error: $err');
-          state = state.copyWith(
-            isConnected: false,
-            isConnecting: false,
-            lastError: 'Sunucu bağlantısı koptu. Yeniden bağlanılıyor...',
-          );
-          _scheduleReconnect();
-        },
-      );
-
-      // Wait until connection is genuinely ready before sending auth
-      try {
-        await channel.ready;
+    await _socketClient.connect(
+      wsUrl: _wsUrl,
+      onMessage: (msg) {
+        state = OnlineMessageProcessor.process(
+          raw: msg,
+          currentState: state,
+          onSaveProfile: _saveProfile,
+          onSyncPlayers: _syncCouplePlayersWithOnlineProfiles,
+        );
+      },
+      onConnected: () {
         state = state.copyWith(isConnected: true, isConnecting: false);
-        _sendAuth();
-      } catch (e) {
-        debugPrint('[OnlineController] Channel ready error: $e');
+        _send('auth', {'username': state.user.username});
+      },
+      onDisconnected: () {
         state = state.copyWith(isConnected: false, isConnecting: false);
         _scheduleReconnect();
-      }
+      },
+      onError: (err) {
+        state = state.copyWith(
+          isConnected: false,
+          isConnecting: false,
+          lastError: 'Sunucu bağlantısı koptu. Yeniden bağlanılıyor...',
+        );
+        _scheduleReconnect();
+      },
+    );
 
-      // Proactively pull friend requests via REST API
-      fetchRequests();
-    } catch (e) {
-      debugPrint('[OnlineController] Connect exception: $e');
-      state = state.copyWith(
-        isConnected: false,
-        isConnecting: false,
-        lastError: 'Bağlantı hatası: $e',
-      );
-      _scheduleReconnect();
-    }
+    fetchRequests();
   }
 
   void _scheduleReconnect() {
     if (_disposed || !state.isLoggedIn) return;
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 3), () {
-      if (!state.isConnected && state.isLoggedIn) {
-        connect();
-      }
+      if (!state.isConnected && state.isLoggedIn) connect();
     });
   }
 
   void _send(String type, Map<String, dynamic> payload) {
-    if (_channel != null && state.isConnected) {
-      final msg = jsonEncode({
-        'type': type,
-        ...payload,
-        'payload': payload,
-      });
-      _channel!.sink.add(msg);
-    }
-  }
-
-  void _sendAuth() {
-    _send('auth', {
-      'username': state.user.username,
-    });
-  }
-
-  void _handleMessage(String raw) {
-    try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
-      final type = map['type'] as String?;
-      final payload = map['payload'] as Map<String, dynamic>? ?? map;
-
-      switch (type) {
-        case 'auth_success':
-        case 'registered': {
-          final userMap = payload['user'] as Map<String, dynamic>?;
-          final partnerMap = payload['partner'] as Map<String, dynamic>?;
-          final incomingList = (payload['incomingRequests'] as List? ?? [])
-              .map((e) => FriendRequest.fromMap(e as Map<String, dynamic>))
-              .toList();
-          final sentList = (payload['sentRequests'] as List? ?? [])
-              .map((e) => FriendRequest.fromMap(e as Map<String, dynamic>))
-              .toList();
-
-          final updatedUser = userMap != null ? UserProfile.fromMap(userMap) : state.user;
-          final updatedPartner = partnerMap != null ? UserProfile.fromMap(partnerMap) : null;
-
-          state = state.copyWith(
-            isConnected: true,
-            isConnecting: false,
-            user: updatedUser,
-            partner: updatedPartner,
-            incomingRequests: incomingList,
-            sentRequests: sentList,
-            clearError: true,
-          );
-          _saveProfile(updatedUser);
-          _syncCouplePlayersWithOnlineProfiles();
-          break;
-        }
-
-        case 'profile_updated': {
-          final userMap = payload['user'] as Map<String, dynamic>?;
-          if (userMap != null) {
-            final updatedUser = UserProfile.fromMap(userMap);
-            state = state.copyWith(user: updatedUser, statusMessage: 'Profil başarıyla güncellendi! ✅');
-            _saveProfile(updatedUser);
-            _syncCouplePlayersWithOnlineProfiles();
-          }
-          break;
-        }
-
-        case 'friend_request_received':
-        case 'incoming_friend_request': {
-          final reqMap = (payload['request'] as Map<String, dynamic>?) ?? payload;
-          final req = FriendRequest.fromMap(reqMap);
-          final updatedList = List<FriendRequest>.from(state.incomingRequests)
-            ..removeWhere((r) => r.id == req.id)
-            ..insert(0, req);
-          state = state.copyWith(
-            incomingRequests: updatedList,
-            statusMessage: '@${req.fromUsername} size arkadaşlık isteği gönderdi! 💌',
-          );
-          break;
-        }
-
-        case 'request_sent':
-        case 'friend_request_sent': {
-          final reqMap = (payload['request'] as Map<String, dynamic>?) ?? payload;
-          final req = FriendRequest.fromMap(reqMap);
-          final updatedList = List<FriendRequest>.from(state.sentRequests)
-            ..removeWhere((r) => r.id == req.id)
-            ..insert(0, req);
-          state = state.copyWith(
-            sentRequests: updatedList,
-            statusMessage: map['message'] as String? ?? '@${req.toUsername} kullanıcısına istek gönderildi! 🚀',
-          );
-          break;
-        }
-
-        case 'pair_success':
-        case 'partner_paired': {
-          final partnerMap = payload['partner'] as Map<String, dynamic>?;
-          if (partnerMap != null) {
-            final partner = UserProfile.fromMap(partnerMap);
-            final updatedUser = state.user.copyWith(partnerUsername: partner.username);
-            final updatedIncoming = List<FriendRequest>.from(state.incomingRequests)
-              ..removeWhere((r) => r.fromUsername.toLowerCase() == partner.username.toLowerCase());
-
-            state = state.copyWith(
-              user: updatedUser,
-              partner: partner,
-              incomingRequests: updatedIncoming,
-              statusMessage: map['message'] as String? ?? '@${partner.username} ile eşleştiniz! Birlikte oynayın 💕🎉',
-            );
-            _saveProfile(updatedUser);
-            _syncCouplePlayersWithOnlineProfiles();
-          }
-          break;
-        }
-
-        case 'unpair_success':
-        case 'partner_unpaired': {
-          final updatedUser = state.user.copyWith(clearPartner: true);
-          state = state.copyWith(
-            user: updatedUser,
-            clearPartner: true,
-            statusMessage: map['message'] as String? ?? 'Partner bağlantısı sonlandırıldı. 💔',
-          );
-          _saveProfile(updatedUser);
-          _syncCouplePlayersWithOnlineProfiles();
-          break;
-        }
-
-        case 'partner_updated': {
-          final partner = UserProfile.fromMap(payload['partner'] as Map<String, dynamic>? ?? payload);
-          state = state.copyWith(partner: partner);
-          _syncCouplePlayersWithOnlineProfiles();
-          break;
-        }
-
-        case 'user_avatar_updated': {
-          final userMap = payload['user'] as Map<String, dynamic>?;
-          if (userMap != null) {
-            final updatedUser = UserProfile.fromMap(userMap);
-            state = state.copyWith(
-              user: updatedUser,
-              statusMessage: 'Profil fotoğrafın güncellendi! 📸',
-            );
-            _saveProfile(updatedUser);
-            _syncCouplePlayersWithOnlineProfiles();
-          }
-          break;
-        }
-
-        case 'partner_avatar_updated': {
-          final partnerMap = payload['partner'] as Map<String, dynamic>?;
-          if (partnerMap != null) {
-            final updatedPartner = UserProfile.fromMap(partnerMap);
-            state = state.copyWith(
-              partner: updatedPartner,
-              statusMessage: '@${updatedPartner.username} profil fotoğrafını güncelledi! 📸',
-            );
-            _syncCouplePlayersWithOnlineProfiles();
-          }
-          break;
-        }
-
-        case 'partner_status': {
-          final isOnline = payload['isOnline'] as bool? ?? false;
-          if (state.partner != null) {
-            state = state.copyWith(partner: state.partner!.copyWith(isOnline: isOnline));
-          }
-          break;
-        }
-
-        case 'remote_game_action':
-        case 'partner_game_action': {
-          final actionType = payload['actionType'] as String?;
-          final actionData = payload['actionData'] as Map<String, dynamic>? ?? {};
-
-          if (actionType == 'my_ready_status') {
-            final isReady = actionData['isReady'] as bool? ?? false;
-            state = state.copyWith(isSelfReady: isReady);
-          } else if (actionType == 'partner_ready_status') {
-            final isReady = actionData['isReady'] as bool? ?? false;
-            state = state.copyWith(isPartnerReady: isReady);
-          } else if (actionType == 'start_synced_game') {
-            state = state.copyWith(
-              isSelfReady: false,
-              isPartnerReady: false,
-              lastGameAction: payload,
-            );
-          } else {
-            state = state.copyWith(lastGameAction: payload);
-          }
-          break;
-        }
-
-
-        case 'error': {
-          final msg = map['message'] as String? ?? 'Bilinmeyen sunucu hatası.';
-          state = state.copyWith(lastError: msg);
-          break;
-        }
-
-        case 'info': {
-          final msg = map['message'] as String?;
-          if (msg != null) {
-            state = state.copyWith(statusMessage: msg);
-          }
-          break;
-        }
-      }
-    } catch (e) {
-      debugPrint('[OnlineController] parse error: $e');
-    }
+    if (state.isConnected) _socketClient.send(type, payload);
   }
 
   Future<void> _saveProfile(UserProfile profile) async {
@@ -583,7 +232,8 @@ class OnlineController extends StateNotifier<OnlineState> {
     } catch (_) {}
   }
 
-  // User Actions
+  // --- User Profile Actions ---
+
   Future<void> updateUsername(String newUsername) async {
     final sanitized = newUsername.trim().toLowerCase().replaceFirst(RegExp(r'^@'), '');
     if (sanitized.length < 3) {
@@ -622,64 +272,38 @@ class OnlineController extends StateNotifier<OnlineState> {
 
   Future<bool> uploadCustomAvatar(String? base64String) async {
     state = state.copyWith(clearError: true);
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/user/avatar');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': state.user.username,
-          'customAvatarBase64': (base64String != null && base64String.isNotEmpty) ? base64String : null,
-        }),
+    final result = await _apiClient.uploadCustomAvatar(
+      username: state.user.username,
+      base64String: base64String,
+    );
+
+    if (result.success && result.data != null) {
+      final updatedUser = result.data!;
+      state = state.copyWith(
+        user: updatedUser,
+        statusMessage: (base64String != null && base64String.isNotEmpty)
+            ? 'Profil fotoğrafın güncellendi! 📸'
+            : 'Fotoğraf kaldırıldı, karakterine dönüldü! 🐾',
       );
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        final updatedUser = UserProfile.fromMap(data['user'] as Map<String, dynamic>);
-        state = state.copyWith(
-          user: updatedUser,
-          statusMessage: (base64String != null && base64String.isNotEmpty)
-              ? 'Profil fotoğrafın güncellendi! 📸'
-              : 'Fotoğraf kaldırıldı, karakterine dönüldü! 🐾',
-        );
-        await _saveProfile(updatedUser);
-        _syncCouplePlayersWithOnlineProfiles();
-        return true;
-      } else {
-        state = state.copyWith(lastError: data['error'] as String? ?? 'Fotoğraf güncellenemedi.');
-        return false;
-      }
-    } catch (e) {
-      state = state.copyWith(lastError: 'Fotoğraf yüklenirken hata oluştu: $e');
-      return false;
+      await _saveProfile(updatedUser);
+      _syncCouplePlayersWithOnlineProfiles();
+      return true;
     }
+    state = state.copyWith(lastError: result.error ?? 'Fotoğraf güncellenemedi.');
+    return false;
   }
 
-  Future<bool> removeCustomAvatar() async {
-    return uploadCustomAvatar(null);
-  }
+  Future<bool> removeCustomAvatar() => uploadCustomAvatar(null);
 
   Future<void> fetchRequests() async {
     if (!state.isLoggedIn || state.user.username.isEmpty) return;
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/friend-requests/${Uri.encodeComponent(state.user.username)}');
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        if (data['success'] == true) {
-          final incomingList = (data['incomingRequests'] as List? ?? [])
-              .map((e) => FriendRequest.fromMap(e as Map<String, dynamic>))
-              .toList();
-          final sentList = (data['sentRequests'] as List? ?? [])
-              .map((e) => FriendRequest.fromMap(e as Map<String, dynamic>))
-              .toList();
-
-          state = state.copyWith(
-            incomingRequests: incomingList,
-            sentRequests: sentList,
-          );
-        }
-      }
-    } catch (_) {}
+    final requests = await _apiClient.fetchFriendRequests(state.user.username);
+    if (requests != null) {
+      state = state.copyWith(
+        incomingRequests: requests.incoming,
+        sentRequests: requests.sent,
+      );
+    }
   }
 
   Future<bool> sendFriendRequest(String toUsername) async {
@@ -693,100 +317,57 @@ class OnlineController extends StateNotifier<OnlineState> {
       return false;
     }
 
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/friend-request');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'fromUsername': state.user.username,
-          'toUsername': clean,
-        }),
-      );
+    final result = await _apiClient.sendFriendRequest(
+      fromUsername: state.user.username,
+      toUsername: clean,
+    );
 
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        final req = FriendRequest.fromMap(data['request'] as Map<String, dynamic>);
-        final updatedList = List<FriendRequest>.from(state.sentRequests)
-          ..removeWhere((r) => r.id == req.id)
-          ..insert(0, req);
-        state = state.copyWith(
-          sentRequests: updatedList,
-          statusMessage: '@$clean kullanıcısına arkadaşlık isteği gönderildi! 🚀',
-          clearError: true,
-        );
-        // Also send through websocket for instant delivery
-        _send('send_friend_request', {
-          'fromUsername': state.user.username,
-          'toUsername': clean,
-        });
-        return true;
-      } else {
-        final errorMsg = data['error'] as String? ?? 'İstek gönderilemedi.';
-        state = state.copyWith(lastError: errorMsg);
-        return false;
-      }
-    } catch (e) {
-      // Fallback: try websocket
-      _send('send_friend_request', {
-        'fromUsername': state.user.username,
-        'toUsername': clean,
-      });
-      state = state.copyWith(statusMessage: '@$clean kullanıcısına istek iletiliyor...');
+    if (result.success && result.data != null) {
+      final req = result.data!;
+      final updatedList = List<FriendRequest>.from(state.sentRequests)
+        ..removeWhere((r) => r.id == req.id)
+        ..insert(0, req);
+      state = state.copyWith(
+        sentRequests: updatedList,
+        statusMessage: '@$clean kullanıcısına arkadaşlık isteği gönderildi! 🚀',
+        clearError: true,
+      );
+      _send('send_friend_request', {'fromUsername': state.user.username, 'toUsername': clean});
       return true;
     }
+    _send('send_friend_request', {'fromUsername': state.user.username, 'toUsername': clean});
+    state = state.copyWith(statusMessage: '@$clean kullanıcısına istek iletiliyor...');
+    return true;
   }
 
   Future<bool> respondFriendRequest(String requestId, bool accept) async {
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/friend-request/respond');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'requestId': requestId,
-          'username': state.user.username,
-          'accept': accept,
-        }),
-      );
+    final result = await _apiClient.respondFriendRequest(
+      requestId: requestId,
+      username: state.user.username,
+      accept: accept,
+    );
 
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        if (accept && data['partner'] != null) {
-          final partner = UserProfile.fromMap(data['partner'] as Map<String, dynamic>);
-          final updatedUser = state.user.copyWith(partnerUsername: partner.username);
-          final updatedIncoming = List<FriendRequest>.from(state.incomingRequests)
-            ..removeWhere((r) => r.id == requestId || r.fromUsername.toLowerCase() == partner.username.toLowerCase());
+    if (result.success) {
+      if (accept && result.data != null) {
+        final partner = result.data!;
+        final updatedUser = state.user.copyWith(partnerUsername: partner.username);
+        final updatedIncoming = List<FriendRequest>.from(state.incomingRequests)
+          ..removeWhere((r) => r.id == requestId || r.fromUsername.toLowerCase() == partner.username.toLowerCase());
 
-          state = state.copyWith(
-            user: updatedUser,
-            partner: partner,
-            incomingRequests: updatedIncoming,
-            statusMessage: '@${partner.username} ile eşleştiniz! Birlikte oynayın 💕🎉',
-          );
-          _saveProfile(updatedUser);
-          _syncCouplePlayersWithOnlineProfiles();
-        } else {
-          final updatedIncoming = List<FriendRequest>.from(state.incomingRequests)
-            ..removeWhere((r) => r.id == requestId);
-          state = state.copyWith(
-            incomingRequests: updatedIncoming,
-            statusMessage: 'İstek reddedildi.',
-          );
-        }
-
-        // Notify WS as well
-        _send('respond_friend_request', {
-          'requestId': requestId,
-          'username': state.user.username,
-          'accept': accept,
-        });
-        return true;
+        state = state.copyWith(
+          user: updatedUser,
+          partner: partner,
+          incomingRequests: updatedIncoming,
+          statusMessage: '@${partner.username} ile eşleştiniz! Birlikte oynayın 💕🎉',
+        );
+        _saveProfile(updatedUser);
+        _syncCouplePlayersWithOnlineProfiles();
       } else {
-        state = state.copyWith(lastError: data['error'] as String? ?? 'Cevap verilemedi.');
-        return false;
+        final updatedIncoming = List<FriendRequest>.from(state.incomingRequests)
+          ..removeWhere((r) => r.id == requestId);
+        state = state.copyWith(incomingRequests: updatedIncoming, statusMessage: 'İstek reddedildi.');
       }
-    } catch (e) {
+
       _send('respond_friend_request', {
         'requestId': requestId,
         'username': state.user.username,
@@ -794,18 +375,16 @@ class OnlineController extends StateNotifier<OnlineState> {
       });
       return true;
     }
+    _send('respond_friend_request', {
+      'requestId': requestId,
+      'username': state.user.username,
+      'accept': accept,
+    });
+    return true;
   }
 
   Future<void> unpair() async {
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/unpair');
-      await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': state.user.username}),
-      );
-    } catch (_) {}
-
+    await _apiClient.unpair(state.user.username);
     _send('unpair_partner', {'username': state.user.username});
 
     final updatedUser = state.user.copyWith(clearPartner: true);
@@ -831,98 +410,44 @@ class OnlineController extends StateNotifier<OnlineState> {
     sendGameAction(ready ? 'player_ready' : 'player_unready', {'ready': ready});
   }
 
-  Future<List<QuizQuestion>> fetchCustomQuestions([String? username]) async {
-    final targetUser = username ?? state.user.username;
-    if (targetUser.isEmpty) return [];
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/questions/${Uri.encodeComponent(targetUser)}');
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        if (data['success'] == true) {
-          final list = (data['questions'] as List? ?? [])
-              .map((e) => QuizQuestion.fromMap(e as Map<String, dynamic>))
-              .toList();
-          return list;
-        }
-      }
-    } catch (_) {}
-    return [];
-  }
+  Future<List<QuizQuestion>> fetchCustomQuestions([String? username]) =>
+      _apiClient.fetchCustomQuestions(username ?? state.user.username);
 
   Future<bool> createCustomQuestion(
     String text,
     List<String> options, {
     QuestionType type = QuestionType.multipleChoice,
   }) async {
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/questions');
-      final res = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': state.user.username,
-          'text': text,
-          'type': type.name,
-          'options': options,
-        }),
-      );
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      if (res.statusCode == 200 && data['success'] == true) {
-        state = state.copyWith(statusMessage: 'Sorunuz başarıyla eklendi! ✨', clearError: true);
-        return true;
-      } else {
-        state = state.copyWith(lastError: data['error'] as String? ?? 'Soru eklenemedi.');
-        return false;
-      }
-    } catch (e) {
-      state = state.copyWith(lastError: 'Sunucuya ulaşılamadı.');
-      return false;
+    final result = await _apiClient.createCustomQuestion(
+      username: state.user.username,
+      text: text,
+      options: options,
+      type: type,
+    );
+    if (result.success) {
+      state = state.copyWith(statusMessage: 'Sorunuz başarıyla eklendi! ✨', clearError: true);
+      return true;
     }
+    state = state.copyWith(lastError: result.error ?? 'Soru eklenemedi.');
+    return false;
   }
 
-  Future<bool> deleteCustomQuestion(String questionId) async {
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/questions/$questionId?username=${Uri.encodeComponent(state.user.username)}');
-      final res = await http.delete(uri);
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      return res.statusCode == 200 && data['success'] == true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> deleteCustomQuestion(String questionId) =>
+      _apiClient.deleteCustomQuestion(questionId: questionId, username: state.user.username);
 
-  Future<List<QuizQuestion>> fetchQuizTest([String? username]) async {
-    final targetUser = username ?? state.user.username;
-    if (targetUser.isEmpty) return [];
-    try {
-      final uri = Uri.parse('${state.serverUrl}/api/quiz-test/${Uri.encodeComponent(targetUser)}');
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        if (data['success'] == true) {
-          final list = (data['questions'] as List? ?? [])
-              .map((e) => QuizQuestion.fromMap(e as Map<String, dynamic>))
-              .toList();
-          return list;
-        }
-      }
-    } catch (_) {}
-    return [];
-  }
+  Future<List<QuizQuestion>> fetchQuizTest([String? username]) =>
+      _apiClient.fetchQuizTest(username ?? state.user.username);
 
   void clearStatus() {
     state = state.copyWith(clearStatus: true, clearError: true);
   }
-
 
   @override
   void dispose() {
     _disposed = true;
     _syncTimer?.cancel();
     _reconnectTimer?.cancel();
-    _channelSub?.cancel();
-    _channel?.sink.close();
+    _socketClient.dispose();
     super.dispose();
   }
 }
