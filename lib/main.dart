@@ -7,6 +7,7 @@ import 'core/widgets/responsive_mobile_frame.dart';
 import 'features/auth/presentation/screens/auth_screen.dart';
 import 'features/online/controllers/online_controller.dart';
 import 'features/quiz/presentation/screens/home_screen.dart';
+import 'features/story_tutorial/presentation/screens/story_intro_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +37,16 @@ class PawsAndUsApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       builder: (context, child) => ResponsiveMobileFrame(child: child),
-      home: onlineState.isLoggedIn ? const HomeScreen() : const AuthScreen(),
+      home: !onlineState.isLoggedIn
+          ? const AuthScreen()
+          : onlineState.justRegistered
+              ? StoryIntroScreen(
+                  isNewRegistration: true,
+                  onFinish: () {
+                    ref.read(onlineProvider.notifier).consumeJustRegistered();
+                  },
+                )
+              : const HomeScreen(),
     );
   }
 }

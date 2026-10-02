@@ -6,6 +6,7 @@ class OnlineState {
   final UserProfile user;
   final UserProfile? partner;
   final bool isLoggedIn;
+  final bool justRegistered;
   final bool isConnected;
   final bool isConnecting;
   final String serverUrl;
@@ -21,6 +22,7 @@ class OnlineState {
     required this.user,
     this.partner,
     this.isLoggedIn = false,
+    this.justRegistered = false,
     this.isConnected = false,
     this.isConnecting = false,
     required this.serverUrl,
@@ -40,6 +42,7 @@ class OnlineState {
     UserProfile? partner,
     bool clearPartner = false,
     bool? isLoggedIn,
+    bool? justRegistered,
     bool? isConnected,
     bool? isConnecting,
     String? serverUrl,
@@ -57,6 +60,7 @@ class OnlineState {
       user: user ?? this.user,
       partner: clearPartner ? null : (partner ?? this.partner),
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      justRegistered: justRegistered ?? this.justRegistered,
       isConnected: isConnected ?? this.isConnected,
       isConnecting: isConnecting ?? this.isConnecting,
       serverUrl: serverUrl ?? this.serverUrl,

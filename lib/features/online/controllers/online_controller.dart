@@ -119,6 +119,7 @@ class OnlineController extends StateNotifier<OnlineState> {
       state = state.copyWith(
         user: profile,
         isLoggedIn: true,
+        justRegistered: true,
         isConnecting: false,
         statusMessage: 'Kayıt başarılı! Hoş geldin @${profile.username} ✨',
       );
@@ -131,6 +132,12 @@ class OnlineController extends StateNotifier<OnlineState> {
     }
     state = state.copyWith(isConnecting: false, lastError: result.error ?? 'Kayıt işlemi başarısız oldu.');
     return false;
+  }
+
+  void consumeJustRegistered() {
+    if (state.justRegistered) {
+      state = state.copyWith(justRegistered: false);
+    }
   }
 
   Future<bool> login({

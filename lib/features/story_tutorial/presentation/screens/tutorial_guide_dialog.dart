@@ -85,7 +85,7 @@ class _TutorialGuideDialogState extends State<TutorialGuideDialog> {
                 TextButton.icon(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    showDialog(context: context, builder: (_) => const StoryIntroDialog());
+                    StoryIntroScreen.open(context);
                   },
                   icon: const Icon(Icons.auto_stories_rounded, size: 16),
                   label: const Text('Hikaye 📖', style: TextStyle(fontSize: 12)),

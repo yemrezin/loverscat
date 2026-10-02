@@ -3,47 +3,43 @@ class StoryPanel {
   final int step;
   final String title;
   final String illustrationIcon;
+  final String imageAssetPath;
   final String subtitle;
   final String quote;
-  final String backgroundGlowColorHex;
 
   const StoryPanel({
     required this.step,
     required this.title,
     required this.illustrationIcon,
+    required this.imageAssetPath,
     required this.subtitle,
     required this.quote,
-    this.backgroundGlowColorHex = '0x33FFB703',
   });
 
   static const List<StoryPanel> introPanels = [
     StoryPanel(
       step: 1,
-      title: 'Huzurlu Başlangıç',
-      illustrationIcon: '🏝️🧺🎈',
-      subtitle: 'Sıradan, güneşli bir ada sabahıydı... İki sevgili piknik yaparken kahkahalar atıyor, küçük çocukları ise elinde devasa bir uçan balon demetiyle neşeyle koşturuyordu.',
-      quote: '"Sıradan, güneşli bir ada sabahıydı... Ta ki gökyüzü uyanana kadar."',
+      title: 'Huzurlu Ada Sabahı',
+      illustrationIcon: '🐻🧺🎈',
+      imageAssetPath: 'assets/images/story_bear_family.jpg',
+      subtitle: 'Sıradan, güneşli bir ada sabahıydı... Anne ve baba ayı çimenlerde huzurla otururken, küçük kızları ellerinde parlak kırmızı kalp balonuyla neşeyle gülümsüyordu.',
+      quote: '"Aşk dolu, sıcacık bir ada sabahı... Ta ki kaderin rüzgarı esene kadar."',
     ),
     StoryPanel(
       step: 2,
-      title: 'Beklenmedik Fırtına',
-      illustrationIcon: '🌪️⚡🎈👶',
-      subtitle: 'Gökyüzü aniden büyülü bir mor parıltıyla titredi. Mistik Uyum Denizi\'nin rüzgarları esti ve balon demetine sarıldı. Çocuk iplere sıkıca tutunmuş halde göğe doğru yükseldi!',
-      quote: '"Mistik Uyum Denizi\'nin rüzgarları, küçük çocuğu gökyüzüne doğru fırlattı!"',
+      title: 'Mistik Rüzgar & Kırmızı Balon',
+      illustrationIcon: '🌪️🎈👧',
+      imageAssetPath: 'assets/images/story_bear_floating.jpg',
+      subtitle: 'Aniden esen büyülü bir rüzgar, küçük kızın kırmızı kalp balonunu göğe doğru kaldırdı! Kız çocuğu balona sıkıca tutunarak ufuktaki gizemli adalara doğru süzülmeye başladı.',
+      quote: '"Anne ve baba ayı endişeyle gökyüzüne baktı; biricik kızları ufukta kayboluyordu!"',
     ),
     StoryPanel(
       step: 3,
-      title: 'Ufuktaki Hedef',
-      illustrationIcon: '🌋🗺️🧭',
-      subtitle: 'Çocuk balonlarla birlikte ufukta beliren, dumanları tüten son ada olan Wano Zirvesi\'ne doğru sürükleniyor. 10 adalık tehlikeli bir rota önünüzde uzanıyor!',
-      quote: '"İzler gökyüzünde, tehlike ise en uçtaki lav püskürten zirvede!"',
-    ),
-    StoryPanel(
-      step: 4,
-      title: 'Yola Çıkış',
+      title: 'Büyük Kurtarma Yolculuğu',
       illustrationIcon: '⛵🤝💖',
-      subtitle: 'İki sevgili sahildeki pedallı küçük tekneye atlıyor, el ele tutuşuyorlar. Uyum sorularıyla yelkenleri şişirip adaları tek tek aşacak ve çocuklarını kurtaracaklar!',
-      quote: '"Ne kadar uzak olursa olsun, seni birlikte geri alacağız!"',
+      imageAssetPath: 'assets/images/story_bear_boat.jpg',
+      subtitle: 'Anne ve baba ayı hiç tereddüt etmeden küçük teknelerine atladılar ve el ele tutuştular. 10 adalık tehlikeli denizi aşk sorularıyla aşacak ve kızlarını kurtaracaklar!',
+      quote: '"Ne kadar uzak olursa olsun, sevgimizin gücüyle seni kurtaracağız!"',
     ),
   ];
 }
