@@ -25,7 +25,7 @@ class OnlineController extends StateNotifier<OnlineState> {
         return 'http://$host:4000';
       }
     }
-    return 'http://localhost:4000';
+    return 'http://127.0.0.1:4000';
   }
 
   final Ref _ref;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
-/// App theme conforming to pastel, sweet, rounded design specifications.
+/// App theme conforming to vibrant, radiant, rounded mobile game specifications.
 class AppTheme {
   AppTheme._();
 
@@ -24,7 +24,7 @@ class AppTheme {
       textTheme: const TextTheme(
         displayLarge: TextStyle(
           fontSize: 28,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w900,
           color: AppColors.textPrimary,
           letterSpacing: -0.5,
         ),
@@ -36,12 +36,12 @@ class AppTheme {
         ),
         titleLarge: TextStyle(
           fontSize: 20,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: AppColors.textPrimary,
         ),
         titleMedium: TextStyle(
           fontSize: 16,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
         ),
         bodyLarge: TextStyle(
@@ -56,7 +56,7 @@ class AppTheme {
         ),
         labelLarge: TextStyle(
           fontSize: 15,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: Colors.white,
         ),
       ),
@@ -64,8 +64,8 @@ class AppTheme {
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AppColors.borderSubtle, width: 1.8),
         ),
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       ),
@@ -73,15 +73,15 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.player1Badge,
           foregroundColor: Colors.white,
-          elevation: 2,
-          shadowColor: AppColors.player1Badge.withOpacity(0.4),
+          elevation: 3,
+          shadowColor: AppColors.player1Badge.withOpacity(0.45),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           textStyle: const TextStyle(
             fontSize: 16,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
@@ -89,13 +89,13 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          side: const BorderSide(color: AppColors.textSecondary, width: 1.5),
+          side: const BorderSide(color: AppColors.player1Badge, width: 1.8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -105,27 +105,27 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.8),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.8),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(color: AppColors.player1Badge, width: 2),
+          borderSide: const BorderSide(color: AppColors.player1Badge, width: 2.2),
         ),
         hintStyle: const TextStyle(color: AppColors.textLight, fontSize: 14),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.backgroundWarm,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(26),
         ),
-        elevation: 8,
+        elevation: 10,
       ),
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.backgroundWarm,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),

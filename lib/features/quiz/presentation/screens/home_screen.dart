@@ -41,10 +41,18 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFF2F5), Color(0xFFFFF8F2), Color(0xFFFBF4FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -95,6 +103,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -131,12 +140,15 @@ class HomeScreen extends ConsumerWidget {
             children: [
               Text('💕', style: TextStyle(fontSize: 12)),
               SizedBox(width: 4),
-              Text(
-                'One Piece • Hedef Raftel ⛵',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.player1Badge,
+              Flexible(
+                child: Text(
+                  'One Piece • Hedef Raftel ⛵',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.player1Badge,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

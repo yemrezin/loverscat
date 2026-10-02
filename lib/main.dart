@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/responsive_mobile_frame.dart';
 import 'features/auth/presentation/screens/auth_screen.dart';
 import 'features/online/controllers/online_controller.dart';
 import 'features/quiz/presentation/screens/home_screen.dart';
@@ -34,14 +35,7 @@ class PawsAndUsApp extends ConsumerWidget {
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      builder: (context, child) {
-        return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: child!,
-          ),
-        );
-      },
+      builder: (context, child) => ResponsiveMobileFrame(child: child),
       home: onlineState.isLoggedIn ? const HomeScreen() : const AuthScreen(),
     );
   }

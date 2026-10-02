@@ -59,7 +59,8 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
       children: [
         // 1. Send Request Form
         _buildContainer(
-          title: '💌 Arkadaş Ekle',
+          icon: '💌',
+          title: 'Arkadaş Ekle',
           subtitle: 'Arkadaşının @kullanıcı_adı bilgisini girerek anında istek gönder.',
           children: [
             Row(
@@ -67,38 +68,57 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
                 Expanded(
                   child: TextField(
                     controller: _friendUsernameController,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'kullanıcı_adı (örn: gizem_99)',
                       prefixText: '@ ',
+                      prefixStyle: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.player1Badge, fontSize: 16),
                       filled: true,
                       fillColor: Colors.white,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: AppColors.borderSubtle),
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.8),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: AppColors.borderSubtle),
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: const BorderSide(color: AppColors.borderSubtle, width: 1.8),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: AppColors.catBody, width: 2),
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: const BorderSide(color: AppColors.player1Badge, width: 2.2),
                       ),
                     ),
                     onSubmitted: (_) => _sendRequest(),
                   ),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _sendRequest,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.catBody,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.vibrantOrangeGradient,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.catBody.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: const Text('İstek Gönder', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: _sendRequest,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Text(
+                          'İstek Gönder',
+                          style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -108,10 +128,10 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Veritabanındaki Kayıtlı Oyuncular (Hızlı Seçim):',
+                    'Kayıtlı Oyuncular (Hızlı Seç):',
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -120,24 +140,28 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
                       HapticUtils.light();
                       widget.onRefreshUsers();
                     },
-                    child: Row(
-                      children: [
-                        if (widget.loadingUsers)
-                          const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          const Icon(Icons.refresh_rounded, size: 16, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        const Text('Yenile', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                      ],
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      child: Row(
+                        children: [
+                          if (widget.loadingUsers)
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            const Icon(Icons.refresh_rounded, size: 16, color: AppColors.player1Badge),
+                          const SizedBox(width: 4),
+                          const Text('Yenile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.player1Badge)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -145,16 +169,32 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
                     .where((u) => u.username.toLowerCase() != onlineState.user.username.toLowerCase())
                     .map((u) {
                   return ActionChip(
-                    avatar: Image.asset(u.petType.headAssetPath, width: 22, height: 22),
+                    avatar: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: u.isOnline ? AppColors.successGreen : AppColors.borderSubtle,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Image.asset(u.petType.headAssetPath, width: 22, height: 22),
+                    ),
                     label: Text(
                       '@${u.username}${u.isOnline ? " 🟢" : ""}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: u.isOnline ? const Color(0xFF007A3D) : AppColors.textPrimary,
+                      ),
                     ),
-                    backgroundColor: Colors.white,
+                    backgroundColor: u.isOnline ? const Color(0xFFE8FDF3) : Colors.white,
                     side: BorderSide(
-                      color: u.isOnline ? const Color(0xFF52B788) : AppColors.borderSubtle,
-                      width: u.isOnline ? 1.5 : 1,
+                      color: u.isOnline ? AppColors.successGreen : AppColors.borderSubtle,
+                      width: u.isOnline ? 1.8 : 1.2,
                     ),
+                    elevation: 1,
+                    shadowColor: u.isOnline ? AppColors.successGreen.withOpacity(0.2) : Colors.black12,
                     onPressed: () {
                       HapticUtils.light();
                       _friendUsernameController.text = u.username;
@@ -170,43 +210,62 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
         if (onlineState.incomingRequests.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildContainer(
-            title: '📬 Gelen Arkadaşlık İstekleri (${onlineState.incomingRequests.length})',
+            icon: '📬',
+            title: 'Gelen Arkadaşlık İstekleri (${onlineState.incomingRequests.length})',
             subtitle: 'Seni arkadaş olarak eklemek isteyenler:',
-            borderColor: const Color(0xFF52B788),
+            borderColor: AppColors.successGreen,
             children: [
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: onlineState.incomingRequests.length,
-                separatorBuilder: (_, __) => const Divider(height: 14),
+                separatorBuilder: (_, __) => const Divider(height: 16, color: AppColors.borderSubtle),
                 itemBuilder: (context, index) {
                   final req = onlineState.incomingRequests[index];
                   return Row(
                     children: [
-                      Image.asset(req.fromPetType.headAssetPath, width: 36, height: 36),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.player2Badge, width: 2),
+                          color: Colors.white,
+                        ),
+                        child: Image.asset(req.fromPetType.headAssetPath, width: 36, height: 36),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           '@${req.fromUsername}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppColors.textPrimary),
                         ),
                       ),
-                      ElevatedButton(
-                        onPressed: () {
-                          HapticUtils.heavy();
-                          notifier.respondFriendRequest(req.id, true);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2D6A4F),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFF00E676), Color(0xFF00C853)]),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: const [
+                            BoxShadow(color: Color(0x3300E676), blurRadius: 6, offset: Offset(0, 2)),
+                          ],
                         ),
-                        child: const Text('Kabul Et', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () {
+                              HapticUtils.heavy();
+                              notifier.respondFriendRequest(req.id, true);
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              child: Text('Kabul Et', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.white)),
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       IconButton(
-                        icon: const Icon(Icons.close_rounded, color: AppColors.angryRed, size: 20),
+                        icon: const Icon(Icons.close_rounded, color: AppColors.angryRed, size: 22),
                         onPressed: () {
                           HapticUtils.light();
                           notifier.respondFriendRequest(req.id, false);
@@ -225,29 +284,38 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
         if (onlineState.sentRequests.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildContainer(
-            title: '📤 Gönderilen Bekleyen İstekler (${onlineState.sentRequests.length})',
+            icon: '📤',
+            title: 'Gönderilen Bekleyen İstekler (${onlineState.sentRequests.length})',
             subtitle: 'Karşı tarafın kabul etmesi bekleniyor:',
             children: [
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: onlineState.sentRequests.length,
-                separatorBuilder: (_, __) => const Divider(height: 14),
+                separatorBuilder: (_, __) => const Divider(height: 14, color: AppColors.borderSubtle),
                 itemBuilder: (context, index) {
                   final req = onlineState.sentRequests[index];
                   return Row(
                     children: [
-                      const Icon(Icons.hourglass_top_rounded, color: AppColors.pastelYellow, size: 24),
+                      const Text('⏳', style: TextStyle(fontSize: 20)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           '@${req.toUsername}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.textPrimary),
                         ),
                       ),
-                      const Text(
-                        'Bekleniyor...',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3CD),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFEEBA)),
+                        ),
+                        child: const Text(
+                          'Cevap Bekleniyor',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF856404)),
+                        ),
                       ),
                     ],
                   );
@@ -261,42 +329,73 @@ class _FriendManagementCardState extends State<FriendManagementCard> {
   }
 
   Widget _buildContainer({
+    required String icon,
     required String title,
     required String subtitle,
-    Color? borderColor,
     required List<Widget> children,
+    Color? borderColor,
   }) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor ?? AppColors.borderSubtle, width: borderColor != null ? 1.8 : 1.5),
+        gradient: AppColors.cardWhiteGradient,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: borderColor ?? AppColors.player1Badge.withOpacity(0.35),
+          width: 1.8,
+        ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 12,
-            offset: Offset(0, 4),
+            color: Color(0x18FF1493),
+            blurRadius: 18,
+            offset: Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: AppColors.heroPinkGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.player1Badge.withOpacity(0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(icon, style: const TextStyle(fontSize: 16)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
-          ),
-          const Divider(height: 24),
+          const Divider(height: 24, color: AppColors.borderSubtle),
           ...children,
         ],
       ),

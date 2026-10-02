@@ -69,7 +69,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.statusMessage!),
-            backgroundColor: const Color(0xFF2D6A4F),
+            backgroundColor: AppColors.successGreen,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -77,7 +77,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundWarm,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -88,9 +88,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text(
           'Ayarlar & Arkadaş Ekle ⚙️',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
             fontSize: 18,
             color: AppColors.textPrimary,
+            letterSpacing: -0.2,
           ),
         ),
         centerTitle: true,
@@ -99,41 +100,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: onlineState.isConnected
-                      ? const Color(0xFFD8F3DC)
-                      : const Color(0xFFFFE3E3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: onlineState.isConnected
-                        ? const Color(0xFF52B788)
-                        : const Color(0xFFE63946),
-                    width: 1.2,
-                  ),
+                  gradient: onlineState.isConnected
+                      ? const LinearGradient(colors: [Color(0xFF00E676), Color(0xFF00C853)])
+                      : const LinearGradient(colors: [Color(0xFFFF1744), Color(0xFFD50000)]),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (onlineState.isConnected ? AppColors.successGreen : AppColors.angryRed).withOpacity(0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: onlineState.isConnected
-                            ? const Color(0xFF2D6A4F)
-                            : const Color(0xFFE63946),
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Text(
-                      onlineState.isConnected ? 'Bağlı' : 'Çevrimdışı',
-                      style: TextStyle(
+                      onlineState.isConnected ? 'Çevrimiçi' : 'Çevrimdışı',
+                      style: const TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: onlineState.isConnected
-                            ? const Color(0xFF2D6A4F)
-                            : const Color(0xFFE63946),
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -143,89 +141,148 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Rumuz & Profil
-              ProfileSettingsCard(
-                ref: ref,
-                onlineState: onlineState,
-              ),
-              const SizedBox(height: 16),
-
-              // 2. Partner Connection Card
-              if (onlineState.isPaired) ...[
-                PartnerPairCard(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFF2F5), Color(0xFFFFF8F2), Color(0xFFFBF4FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 1. Rumuz & Profil Card
+                ProfileSettingsCard(
+                  ref: ref,
                   onlineState: onlineState,
-                  notifier: notifier,
                 ),
                 const SizedBox(height: 16),
-              ],
 
-              // 3. Friend Management & Requests
-              FriendManagementCard(
-                onlineState: onlineState,
-                notifier: notifier,
-                allUsers: _allUsers,
-                loadingUsers: _loadingUsers,
-                onRefreshUsers: _loadRegisteredUsers,
-              ),
-              const SizedBox(height: 16),
+                // 2. Partner Connection Card (if paired)
+                if (onlineState.isPaired) ...[
+                  PartnerPairCard(
+                    onlineState: onlineState,
+                    notifier: notifier,
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
-              // 4. Logout Section Card
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.borderSubtle, width: 1.5),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0A000000),
-                      blurRadius: 12,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                // 3. Friend Management & Requests
+                FriendManagementCard(
+                  onlineState: onlineState,
+                  notifier: notifier,
+                  allUsers: _allUsers,
+                  loadingUsers: _loadingUsers,
+                  onRefreshUsers: _loadRegisteredUsers,
                 ),
+                const SizedBox(height: 16),
+
+                // 4. Logout Section Card
+                _buildLogoutCard(context, notifier),
+                const SizedBox(height: 28),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutCard(BuildContext context, OnlineController notifier) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: AppColors.cardWhiteGradient,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderSubtle, width: 1.8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12FF1493),
+            blurRadius: 16,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.angryRed.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('🚪', style: TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '🚪 Hesap & Çıkış',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    Text(
+                      'Hesap & Çıkış',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Mevcut hesabınızdan güvenli şekilde çıkış yapın.',
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
-                    const SizedBox(height: 14),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        HapticUtils.heavy();
-                        notifier.logout();
-                        Navigator.of(context).pop();
-                      },
-                      icon: const Icon(Icons.logout_rounded, size: 18),
-                      label: const Text('Hesaptan Çıkış Yap', style: TextStyle(fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.angryRed,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF1744), Color(0xFFFF5252)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.angryRed.withOpacity(0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () {
+                  HapticUtils.heavy();
+                  notifier.logout();
+                  Navigator.of(context).pop();
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.logout_rounded, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Hesaptan Çıkış Yap',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
