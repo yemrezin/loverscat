@@ -83,7 +83,6 @@ class _ShipPainter extends CustomPainter {
 
     // Hull (Wooden body)
     final hullPaint = Paint()..color = const Color(0xFF8B4513);
-    final hullDarkPaint = Paint()..color = const Color(0xFF5C2C16);
     final hullPath = Path();
     hullPath.moveTo(w * 0.15, h * 0.62);
     hullPath.quadraticBezierTo(w * 0.25, h * 0.88, w * 0.85, h * 0.84);

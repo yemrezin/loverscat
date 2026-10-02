@@ -1,0 +1,40 @@
+{
+  "users": {
+    "kullanici7263": {
+      "username": "kullanici7263",
+      "displayName": "kullanici7263",
+      "petType": "cat",
+      "petName": "Mırmır",
+      "partnerUsername": null,
+      "updatedAt": "2026-10-01T11:06:24.502Z"
+    },
+    "user1": {
+      "username": "user1",
+      "displayName": "kullanici3115",
+      "petType": "fox",
+      "petName": "Mırmır",
+      "partnerUsername": "user2",
+      "updatedAt": "2026-10-01T11:08:28.321Z"
+    },
+    "user2": {
+      "username": "user2",
+      "displayName": "kullanici4698",
+      "petType": "cat",
+      "petName": "Mırmır",
+      "partnerUsername": "user1",
+      "updatedAt": "2026-10-01T11:08:48.796Z"
+    }
+  },
+  "friendRequests": [
+    {
+      "id": "req_1790852934411_81taq",
+      "fromUsername": "user2",
+      "toUsername": "user1",
+      "fromDisplayName": "kullanici4698",
+      "fromPetType": "cat",
+      "fromPetName": "Mırmır",
+      "createdAt": "2026-10-01T11:08:54.411Z",
+      "status": "accepted"
+    }
+  ]
+}

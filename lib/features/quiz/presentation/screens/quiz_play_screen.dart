@@ -13,12 +13,12 @@ import '../widgets/answer_input_card.dart';
 import '../widgets/cat_display_widget.dart';
 import '../widgets/confetti_overlay_widget.dart';
 import '../widgets/screen_shake_widget.dart';
-import '../widgets/turn_transition_overlay.dart';
 import '../widgets/whispering_bird_button.dart';
 import 'package:loverscat/features/map/domain/models/island_board.dart';
 import 'package:loverscat/features/map/presentation/controllers/map_providers.dart';
-import 'package:loverscat/features/map/presentation/screens/world_map_screen.dart';
 import 'package:loverscat/features/pet/presentation/controllers/pet_providers.dart';
+import 'package:loverscat/features/pet/domain/models/pet_avatar.dart';
+import 'package:loverscat/features/online/controllers/online_controller.dart';
 
 /// Primary Game Screen orchestrating the 3-step couple quiz loop.
 class QuizPlayScreen extends ConsumerStatefulWidget {
@@ -32,6 +32,10 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
   bool _stepsAwarded = false;
   Timer? _questionTimer;
   int _remainingSeconds = 10;
+  int _onlineStep = 0; // 0 = own answer, 1 = guess partner, 2 = waiting for partner
+  String? _myOwnAnswer;
+  String? _myGuess;
+  Map<String, dynamic>? _partnerSubmission;
 
   @override
   void initState() {
@@ -86,10 +90,45 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
     _questionTimer = null;
   }
 
+  void _finalizeOnlineRound(OnlineState online, CouplePlayers couple, QuizGameNotifier notifier) {
+    _stopTimer();
+    final myUname = online.user.username.toLowerCase();
+    final isMeP1 = myUname == couple.player1.name.toLowerCase();
+
+    final p1Own = isMeP1 ? (_myOwnAnswer ?? kPartnerNotKnowingAnswer) : (_partnerSubmission?['ownAnswer'] ?? kPartnerNotKnowingAnswer);
+    final p1Guess = isMeP1 ? (_myGuess ?? '') : (_partnerSubmission?['guess'] ?? '');
+    final p2Own = isMeP1 ? (_partnerSubmission?['ownAnswer'] ?? kPartnerNotKnowingAnswer) : (_myOwnAnswer ?? kPartnerNotKnowingAnswer);
+    final p2Guess = isMeP1 ? (_partnerSubmission?['guess'] ?? '') : (_myGuess ?? '');
+
+    notifier.setOnlineRoundAnswers(
+      p1OwnAnswer: p1Own,
+      p1Guess: p1Guess,
+      p2OwnAnswer: p2Own,
+      p2Guess: p2Guess,
+    );
+  }
+
+  void _advanceToNextQuestion(QuizGameNotifier notifier) {
+    setState(() {
+      _onlineStep = 0;
+      _myOwnAnswer = null;
+      _myGuess = null;
+      _partnerSubmission = null;
+    });
+    final online = ref.read(onlineProvider);
+    if (online.isPaired) {
+      ref.read(onlineProvider.notifier).sendGameAction('quiz_next', {});
+    }
+    notifier.nextQuestion();
+    _startTimer();
+  }
+
   void _handleTimeout() {
     if (!mounted) return;
     final gameState = ref.read(quizGameProvider);
     final notifier = ref.read(quizGameProvider.notifier);
+    final online = ref.read(onlineProvider);
+    final couple = ref.read(couplePlayersProvider);
 
     if (gameState.isTransitionBarrierActive ||
         gameState.phase == GamePhase.revealed ||
@@ -106,10 +145,34 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
       ),
     );
 
-    if (gameState.phase == GamePhase.waitingOwnAnswers) {
-      notifier.sealOwnAnswer(null);
-    } else if (gameState.phase == GamePhase.waitingGuesses) {
-      notifier.submitGuess(null);
+    if (online.isPaired) {
+      if (_onlineStep == 0) {
+        _myOwnAnswer = kPartnerNotKnowingAnswer;
+        setState(() {
+          _onlineStep = 1;
+        });
+        _startTimer();
+      } else if (_onlineStep == 1) {
+        _myGuess = '';
+        setState(() {
+          _onlineStep = 2;
+        });
+        _stopTimer();
+        ref.read(onlineProvider.notifier).sendGameAction('quiz_player_round', {
+          'username': online.user.username,
+          'ownAnswer': _myOwnAnswer,
+          'guess': _myGuess,
+        });
+        if (_partnerSubmission != null) {
+          _finalizeOnlineRound(online, couple, notifier);
+        }
+      }
+    } else {
+      if (gameState.phase == GamePhase.waitingOwnAnswers) {
+        notifier.sealOwnAnswer(null);
+      } else if (gameState.phase == GamePhase.waitingGuesses) {
+        notifier.submitGuess(null);
+      }
     }
   }
 
@@ -122,6 +185,7 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
       _stepsAwarded = true;
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -151,6 +215,46 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
 
     final gameState = ref.watch(quizGameProvider);
     final notifier = ref.read(quizGameProvider.notifier);
+    final couple = ref.watch(couplePlayersProvider);
+    final onlineState = ref.watch(onlineProvider);
+
+    // Listen to remote partner quiz actions
+    ref.listen<OnlineState>(onlineProvider, (prev, next) {
+      final lastAction = next.lastGameAction;
+      if (lastAction != null && lastAction != prev?.lastGameAction) {
+        final actionType = lastAction['actionType'] as String?;
+        final actionData = lastAction['actionData'] as Map<String, dynamic>? ?? {};
+
+        if (actionType == 'quiz_player_round') {
+          _partnerSubmission = actionData;
+          if (_onlineStep == 2) {
+            _finalizeOnlineRound(next, couple, notifier);
+          }
+        } else if (actionType == 'quiz_next') {
+          setState(() {
+            _onlineStep = 0;
+            _myOwnAnswer = null;
+            _myGuess = null;
+            _partnerSubmission = null;
+          });
+          notifier.nextQuestion();
+          _startTimer();
+        } else if (actionType == 'quiz_seal') {
+          final ans = actionData['answer'] as String?;
+          _stopTimer();
+          notifier.sealOwnAnswer(ans);
+        } else if (actionType == 'quiz_guess') {
+          final guess = actionData['guess'] as String?;
+          _stopTimer();
+          notifier.submitGuess(guess);
+        } else if (actionType == 'quiz_judge') {
+          final isCorrect = actionData['isCorrect'] as bool? ?? false;
+          // When remote partner judges, they are Player 2 in our local view
+          notifier.judgeGuess(judgingPlayer: PlayerId.player2, isCorrect: isCorrect);
+        }
+      }
+    });
+
 
     if (gameState.isLoading) {
       return const Scaffold(
@@ -261,32 +365,37 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Active Player & Step Indicator Header
-                      _buildHeaderSection(gameState, activePlayer, playerAccent),
-                      const SizedBox(height: 12),
+                      // If paired and answering (not revealed), show online simultaneous flow
+                      if (onlineState.isPaired && gameState.phase != GamePhase.revealed) ...[
+                        _buildOnlineGameStep(gameState, currentQuestion, notifier, onlineState, couple),
+                      ] else ...[
+                        // Active Player & Step Indicator Header
+                        _buildHeaderSection(gameState, activePlayer, playerAccent, couple),
+                        const SizedBox(height: 12),
 
-                      // 10-Second Timer Bar (shown during active answering steps)
-                      if (gameState.phase != GamePhase.revealed)
-                        _buildTimerBar(playerAccent),
+                        // 10-Second Timer Bar (shown during active answering steps)
+                        if (gameState.phase != GamePhase.revealed)
+                          _buildTimerBar(playerAccent),
 
-                      // Cat Mascot / Judge View
-                      Center(
-                        child: CatDisplayWidget(
-                          reaction: gameState.activeReaction,
-                          size: gameState.phase == GamePhase.revealed ? 180 : 130,
+                        // Cat Mascot / Judge View
+                        Center(
+                          child: CatDisplayWidget(
+                            reaction: gameState.activeReaction,
+                            size: gameState.phase == GamePhase.revealed ? 180 : 130,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // Phase-specific content
-                      if (gameState.phase == GamePhase.waitingOwnAnswers)
-                        _buildStep1Content(gameState, currentQuestion, playerAccent, notifier),
+                        // Phase-specific content
+                        if (gameState.phase == GamePhase.waitingOwnAnswers)
+                          _buildStep1Content(gameState, currentQuestion, playerAccent, notifier),
 
-                      if (gameState.phase == GamePhase.waitingGuesses)
-                        _buildStep2Content(gameState, currentQuestion, playerAccent, notifier),
+                        if (gameState.phase == GamePhase.waitingGuesses)
+                          _buildStep2Content(gameState, currentQuestion, playerAccent, notifier),
 
-                      if (gameState.phase == GamePhase.revealed)
-                        _buildStep3Content(context, gameState, notifier),
+                        if (gameState.phase == GamePhase.revealed)
+                          _buildStep3Content(context, gameState, notifier, couple),
+                      ],
 
                       const SizedBox(height: 24),
                     ],
@@ -295,34 +404,286 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
               ),
             ),
 
-            // Pass-and-Play Privacy Hand-over Screen
-            if (gameState.isTransitionBarrierActive)
-              TurnTransitionOverlay(
-                nextPlayer: gameState.activePlayer,
-                onDismiss: () => notifier.dismissTransitionBarrier(),
-              ),
           ],
         ),
       ),
     );
   }
 
+  Widget _buildQuestionCard(String text, Color bgColor) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bgColor.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: bgColor, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SORU:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnlineGameStep(
+    QuizGameState gameState,
+    dynamic currentQuestion,
+    QuizGameNotifier notifier,
+    OnlineState online,
+    CouplePlayers couple,
+  ) {
+    if (_onlineStep == 0) {
+      // Step 1: Kendi Cevabın
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderSubtle, width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  '1. Adım: Senin Tercihin 🐾',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.player1Badge.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    online.user.formattedUsername,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.player1Badge),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildTimerBar(AppColors.player1Badge),
+          Center(
+            child: CatDisplayWidget(
+              reaction: gameState.activeReaction,
+              size: 130,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildQuestionCard(currentQuestion.text, AppColors.pastelLavender),
+          const SizedBox(height: 20),
+          AnswerInputCard(
+            question: currentQuestion,
+            buttonLabel: 'Cevabımı Kaydet 🐾',
+            accentColor: AppColors.player1Badge,
+            onSubmit: (ans) {
+              _stopTimer();
+              _myOwnAnswer = (ans == null || ans.trim().isEmpty) ? kPartnerNotKnowingAnswer : ans.trim();
+              setState(() {
+                _onlineStep = 1;
+              });
+              _startTimer();
+            },
+            onSkip: () {
+              _stopTimer();
+              _myOwnAnswer = kPartnerNotKnowingAnswer;
+              setState(() {
+                _onlineStep = 1;
+              });
+              _startTimer();
+            },
+          ),
+        ],
+      );
+    } else if (_onlineStep == 1) {
+      // Step 2: Partnerinin Cevabını Tahmin Et
+      final partnerName = online.partner?.formattedUsername ?? 'Partnerinin';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderSubtle, width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '2. Adım: $partnerName Cevabını Tahmin Et 🧠',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.player2Badge.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Tahmin Et',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.player2Badge),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildTimerBar(AppColors.player2Badge),
+          Center(
+            child: CatDisplayWidget(
+              reaction: gameState.activeReaction,
+              size: 130,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildQuestionCard(currentQuestion.text, AppColors.pastelPeach),
+          const SizedBox(height: 20),
+          AnswerInputCard(
+            question: currentQuestion,
+            buttonLabel: 'Tahminimi Gönder 🚀',
+            accentColor: AppColors.player2Badge,
+            onSubmit: (guess) {
+              _stopTimer();
+              _myGuess = (guess == null || guess.trim().isEmpty) ? '' : guess.trim();
+              setState(() {
+                _onlineStep = 2;
+              });
+              ref.read(onlineProvider.notifier).sendGameAction('quiz_player_round', {
+                'username': online.user.username,
+                'ownAnswer': _myOwnAnswer,
+                'guess': _myGuess,
+              });
+              if (_partnerSubmission != null) {
+                _finalizeOnlineRound(online, couple, notifier);
+              }
+            },
+            onSkip: () {
+              _stopTimer();
+              _myGuess = '';
+              setState(() {
+                _onlineStep = 2;
+              });
+              ref.read(onlineProvider.notifier).sendGameAction('quiz_player_round', {
+                'username': online.user.username,
+                'ownAnswer': _myOwnAnswer,
+                'guess': _myGuess,
+              });
+              if (_partnerSubmission != null) {
+                _finalizeOnlineRound(online, couple, notifier);
+              }
+            },
+          ),
+        ],
+      );
+    } else {
+      // Step 2: Waiting for partner
+      final partnerName = online.partner?.formattedUsername ?? 'Partnerin';
+      return Column(
+        children: [
+          const SizedBox(height: 30),
+          Center(
+            child: CatDisplayWidget(
+              reaction: CatReaction.idle,
+              size: 140,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.borderSubtle, width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0C4A4453),
+                  blurRadius: 16,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppColors.player1Badge,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Cevapların Kaydedildi! 🐾✨',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$partnerName cevaplarını tamamlaması bekleniyor...\nİkiniz de cevapladığınızda Kedi Yargıç kararı açıklayacak!',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
+
   Widget _buildHeaderSection(
     QuizGameState state,
     PlayerId activePlayer,
     Color playerAccent,
+    CouplePlayers couple,
   ) {
     String phaseLabel;
     String subLabel;
+    final activeName = activePlayer == PlayerId.player1 ? couple.player1.name : couple.player2.name;
 
     switch (state.phase) {
       case GamePhase.waitingOwnAnswers:
         phaseLabel = AppStrings.step1Header;
-        subLabel = 'Sıra ${activePlayer.displayName}\'nda: Kendi cevabını mühürle!';
+        subLabel = 'Sıra $activeName\'nda: Kendi cevabını mühürle!';
         break;
       case GamePhase.waitingGuesses:
         phaseLabel = AppStrings.step2Header;
-        subLabel = 'Sıra ${activePlayer.displayName}\'nda: Sevgilinin cevabını tahmin et!';
+        subLabel = 'Sıra $activeName\'nda: Sevgilinin cevabını tahmin et!';
         break;
       case GamePhase.revealed:
         phaseLabel = AppStrings.step3Header;
@@ -358,7 +719,7 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    activePlayer.displayName,
+                    activeName,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -435,10 +796,12 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
           accentColor: playerAccent,
           onSubmit: (answer) {
             _stopTimer();
+            ref.read(onlineProvider.notifier).sendGameAction('quiz_seal', {'answer': answer});
             notifier.sealOwnAnswer(answer);
           },
           onSkip: () {
             _stopTimer();
+            ref.read(onlineProvider.notifier).sendGameAction('quiz_seal', {'answer': null});
             notifier.sealOwnAnswer(null);
           },
         ),
@@ -507,10 +870,12 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
           accentColor: playerAccent,
           onSubmit: (guess) {
             _stopTimer();
+            ref.read(onlineProvider.notifier).sendGameAction('quiz_guess', {'guess': guess});
             notifier.submitGuess(guess);
           },
           onSkip: () {
             _stopTimer();
+            ref.read(onlineProvider.notifier).sendGameAction('quiz_guess', {'guess': null});
             notifier.submitGuess(null);
           },
         ),
@@ -522,11 +887,16 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
     BuildContext context,
     QuizGameState state,
     QuizGameNotifier notifier,
+    CouplePlayers couple,
   ) {
     final round = state.currentRound;
     final reaction = state.activeReaction;
     final isP1Correct = round.isP1GuessCorrect;
     final isP2Correct = round.isP2GuessCorrect;
+    final currentQ = state.currentQuestion;
+    final isOpenEnded = currentQ?.isOpenEnded ?? false;
+    final online = ref.watch(onlineProvider);
+    final isOnline = online.isLoggedIn && online.isPaired;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -579,40 +949,114 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Player 1 Card
+            // Player 1 Card (Your Card in online mode)
             Expanded(
               child: _buildPlayerVerdictCard(
-                playerName: 'Oyuncu 1',
+                playerName: couple.player1.name,
                 accentColor: AppColors.player1Badge,
                 bgColor: AppColors.pastelPink.withOpacity(0.35),
                 ownAnswer: round.player1OwnAnswer ?? '-',
                 partnerGuess: round.player2Guess ?? '-',
                 isPartnerGuessCorrect: isP2Correct,
-                partnerTitle: 'Oyuncu 2\'nin Tahmini:',
+                partnerTitle: '${couple.player2.name}\'nin Tahmini:',
+                isOpenEnded: isOpenEnded,
+                canJudge: true,
+                isJudged: round.isP2Judged,
+                onJudge: (bool isCorrect) {
+                  HapticUtils.medium();
+                  notifier.judgeGuess(judgingPlayer: PlayerId.player1, isCorrect: isCorrect);
+                  if (isOnline) {
+                    ref.read(onlineProvider.notifier).sendGameAction('quiz_judge', {
+                      'judgedAuthor': online.user.username,
+                      'isCorrect': isCorrect,
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(width: 12),
-            // Player 2 Card
+            // Player 2 Card (Partner's Card in online mode)
             Expanded(
               child: _buildPlayerVerdictCard(
-                playerName: 'Oyuncu 2',
+                playerName: couple.player2.name,
                 accentColor: AppColors.player2Badge,
                 bgColor: AppColors.pastelMint.withOpacity(0.35),
                 ownAnswer: round.player2OwnAnswer ?? '-',
                 partnerGuess: round.player1Guess ?? '-',
                 isPartnerGuessCorrect: isP1Correct,
-                partnerTitle: 'Oyuncu 1\'in Tahmini:',
+                partnerTitle: '${couple.player1.name}\'in Tahmini:',
+                isOpenEnded: isOpenEnded,
+                canJudge: !isOnline,
+                isJudged: round.isP1Judged,
+                waitingMessage: '${couple.player2.name}\'nin kararı bekleniyor... ⏳',
+                onJudge: !isOnline
+                    ? (bool isCorrect) {
+                        HapticUtils.medium();
+                        notifier.judgeGuess(judgingPlayer: PlayerId.player2, isCorrect: isCorrect);
+                      }
+                    : null,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
+
+        // Real-time Running Score Bar: Doğru, Yanlış, Boş
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.borderSubtle, width: 1.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x084A4453),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      couple.player1.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.player1Badge),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    _buildStatBadgeRow(correct: state.player1Score, wrong: state.player1Wrong, blank: state.player1Blank),
+                  ],
+                ),
+              ),
+              Container(width: 1.5, height: 45, color: AppColors.borderSubtle),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      couple.player2.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.player2Badge),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    _buildStatBadgeRow(correct: state.player2Score, wrong: state.player2Wrong, blank: state.player2Blank),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
 
         // Next Question Button
         ElevatedButton(
           onPressed: () {
             HapticUtils.medium();
-            notifier.nextQuestion();
+            _advanceToNextQuestion(notifier);
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.player1Badge,
@@ -632,6 +1076,7 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
       ],
     );
   }
+
 
   Widget _buildTimerBar(Color playerAccent) {
     final progress = (_remainingSeconds / 10.0).clamp(0.0, 1.0);
@@ -722,6 +1167,11 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
     required String partnerGuess,
     required bool isPartnerGuessCorrect,
     required String partnerTitle,
+    bool isOpenEnded = false,
+    bool canJudge = false,
+    bool isJudged = false,
+    ValueChanged<bool>? onJudge,
+    String? waitingMessage,
   }) {
     final isPartnerEmptyOrSilly =
         ownAnswer == kPartnerNotKnowingAnswer || ownAnswer.trim().isEmpty;
@@ -817,6 +1267,95 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
               fontStyle: isGuessBlank ? FontStyle.italic : FontStyle.normal,
             ),
           ),
+          if (isOpenEnded) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: accentColor.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    canJudge ? '⚖️ Bu tahmini değerlendir:' : '⚖️ Karar:',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 6),
+                  if (canJudge) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              HapticUtils.medium();
+                              onJudge?.call(true);
+                            },
+                            icon: const Icon(Icons.thumb_up_alt_rounded, size: 14),
+                            label: const Text('Doğru (+1)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isJudged && isPartnerGuessCorrect ? AppColors.successGreen : Colors.grey.shade100,
+                              foregroundColor: isJudged && isPartnerGuessCorrect ? Colors.white : AppColors.textPrimary,
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                              elevation: isJudged && isPartnerGuessCorrect ? 2 : 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              HapticUtils.medium();
+                              onJudge?.call(false);
+                            },
+                            icon: const Icon(Icons.thumb_down_alt_rounded, size: 14),
+                            label: const Text('Bilemedi (0)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isJudged && !isPartnerGuessCorrect ? AppColors.angryRed : Colors.grey.shade100,
+                              foregroundColor: isJudged && !isPartnerGuessCorrect ? Colors.white : AppColors.textPrimary,
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                              elevation: isJudged && !isPartnerGuessCorrect ? 2 : 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    if (isJudged)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isPartnerGuessCorrect ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                            size: 15,
+                            color: isPartnerGuessCorrect ? AppColors.successGreen : AppColors.angryRed,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isPartnerGuessCorrect ? 'Doğru Kabul Etti! (+1)' : 'Yanlış Saydı (0)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isPartnerGuessCorrect ? AppColors.successGreen : AppColors.angryRed,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        waitingMessage ?? 'Partnerinin kararı bekleniyor... ⏳',
+                        style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: AppColors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1076,26 +1615,6 @@ class _QuizPlayScreenState extends ConsumerState<QuizPlayScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildScoreItem(String label, int score, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$score Doğru',
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-      ],
     );
   }
 

@@ -132,9 +132,36 @@ class QuizGameNotifier extends StateNotifier<QuizGameState> {
     }
   }
 
+  /// Sets both players' inputs simultaneously in online mode and triggers Cat Verdict.
+  void setOnlineRoundAnswers({
+    required String p1OwnAnswer,
+    required String p1Guess,
+    required String p2OwnAnswer,
+    required String p2Guess,
+  }) {
+    final sanitizedP1Own = p1OwnAnswer.trim().isEmpty ? kPartnerNotKnowingAnswer : p1OwnAnswer.trim();
+    final sanitizedP2Own = p2OwnAnswer.trim().isEmpty ? kPartnerNotKnowingAnswer : p2OwnAnswer.trim();
+    final sanitizedP1Guess = p1Guess.trim();
+    final sanitizedP2Guess = p2Guess.trim();
+
+    final round = RoundAnswer(
+      player1OwnAnswer: sanitizedP1Own,
+      player2OwnAnswer: sanitizedP2Own,
+      player1Guess: sanitizedP1Guess,
+      player2Guess: sanitizedP2Guess,
+    );
+
+    state = state.copyWith(currentRound: round, isTransitionBarrierActive: false);
+    _revealCatVerdict(round);
+  }
+
+
   /// Step 3: "Kedi Yargısı" - Reveal answers, evaluate with CatJudgeEngine,
   /// calculate streaks, scores, and bird whisper tokens.
   void _revealCatVerdict(RoundAnswer round) {
+    final currentQ = state.currentQuestion;
+    final isOpenEnded = currentQ?.isOpenEnded ?? false;
+
     final reaction = _judgeEngine.evaluateReaction(round);
     final isP1Correct = round.isP1GuessCorrect;
     final isP2Correct = round.isP2GuessCorrect;
@@ -143,14 +170,23 @@ class QuizGameNotifier extends StateNotifier<QuizGameState> {
     final isP1Blank = round.player1Guess == null || round.player1Guess!.trim().isEmpty;
     final isP2Blank = round.player2Guess == null || round.player2Guess!.trim().isEmpty;
 
-    // Scores (Doğru, Yanlış, Boş) & Streak
-    final newP1Score = state.player1Score + (isP1Correct ? 1 : 0);
-    final newP1Wrong = state.player1Wrong + (!isP1Correct && !isP1Blank ? 1 : 0);
-    final newP1Blank = state.player1Blank + (isP1Blank ? 1 : 0);
+    // For open-ended questions, scores are decided when players judge
+    final p1ScoreAdd = isOpenEnded ? (round.isP1Judged && isP1Correct ? 1 : 0) : (isP1Correct ? 1 : 0);
+    final p1WrongAdd = isOpenEnded ? (round.isP1Judged && !isP1Correct && !isP1Blank ? 1 : 0) : (!isP1Correct && !isP1Blank ? 1 : 0);
+    final p1BlankAdd = (isP1Blank ? 1 : 0);
 
-    final newP2Score = state.player2Score + (isP2Correct ? 1 : 0);
-    final newP2Wrong = state.player2Wrong + (!isP2Correct && !isP2Blank ? 1 : 0);
-    final newP2Blank = state.player2Blank + (isP2Blank ? 1 : 0);
+    final p2ScoreAdd = isOpenEnded ? (round.isP2Judged && isP2Correct ? 1 : 0) : (isP2Correct ? 1 : 0);
+    final p2WrongAdd = isOpenEnded ? (round.isP2Judged && !isP2Correct && !isP2Blank ? 1 : 0) : (!isP2Correct && !isP2Blank ? 1 : 0);
+    final p2BlankAdd = (isP2Blank ? 1 : 0);
+
+    // Scores (Doğru, Yanlış, Boş) & Streak
+    final newP1Score = state.player1Score + p1ScoreAdd;
+    final newP1Wrong = state.player1Wrong + p1WrongAdd;
+    final newP1Blank = state.player1Blank + p1BlankAdd;
+
+    final newP2Score = state.player2Score + p2ScoreAdd;
+    final newP2Wrong = state.player2Wrong + p2WrongAdd;
+    final newP2Blank = state.player2Blank + p2BlankAdd;
 
     final newStreak = bothCorrect ? (state.streak + 1) : 0;
 
@@ -173,6 +209,65 @@ class QuizGameNotifier extends StateNotifier<QuizGameState> {
       streak: newStreak,
       totalCorrectGuesses: newTotal,
       birdWhisperHintsAvailable: newHintsAvailable,
+    );
+  }
+
+  /// Evaluates or updates personal judgment of a guess.
+  /// judgingPlayer == PlayerId.player1: Player 1 judges Player 2's guess (which attempted to guess Player 1's answer).
+  /// judgingPlayer == PlayerId.player2: Player 2 judges Player 1's guess (which attempted to guess Player 2's answer).
+  void judgeGuess({
+    required PlayerId judgingPlayer,
+    required bool isCorrect,
+  }) {
+    final round = state.currentRound;
+    final currentQ = state.currentQuestion;
+    final isOpenEnded = currentQ?.isOpenEnded ?? false;
+
+    final prevP1Correct = round.isP1GuessCorrect;
+    final prevP2Correct = round.isP2GuessCorrect;
+    final prevP1Judged = round.isP1Judged;
+    final prevP2Judged = round.isP2Judged;
+
+    RoundAnswer updatedRound;
+    if (judgingPlayer == PlayerId.player1) {
+      updatedRound = round.copyWith(p2GuessJudgedCorrect: isCorrect);
+    } else {
+      updatedRound = round.copyWith(p1GuessJudgedCorrect: isCorrect);
+    }
+
+    final newP1Correct = updatedRound.isP1GuessCorrect;
+    final newP2Correct = updatedRound.isP2GuessCorrect;
+
+    int p1ScoreDelta = 0;
+    int p1WrongDelta = 0;
+    if (isOpenEnded && !prevP1Judged) {
+      if (newP1Correct) p1ScoreDelta = 1; else p1WrongDelta = 1;
+    } else if (prevP1Correct != newP1Correct) {
+      p1ScoreDelta = newP1Correct ? 1 : -1;
+      p1WrongDelta = newP1Correct ? -1 : 1;
+    }
+
+    int p2ScoreDelta = 0;
+    int p2WrongDelta = 0;
+    if (isOpenEnded && !prevP2Judged) {
+      if (newP2Correct) p2ScoreDelta = 1; else p2WrongDelta = 1;
+    } else if (prevP2Correct != newP2Correct) {
+      p2ScoreDelta = newP2Correct ? 1 : -1;
+      p2WrongDelta = newP2Correct ? -1 : 1;
+    }
+
+    final reaction = _judgeEngine.evaluateReaction(updatedRound);
+    final bothCorrect = newP1Correct && newP2Correct;
+    final newStreak = bothCorrect ? (state.streak + 1) : 0;
+
+    state = state.copyWith(
+      currentRound: updatedRound,
+      activeReaction: reaction,
+      player1Score: (state.player1Score + p1ScoreDelta).clamp(0, 999),
+      player1Wrong: (state.player1Wrong + p1WrongDelta).clamp(0, 999),
+      player2Score: (state.player2Score + p2ScoreDelta).clamp(0, 999),
+      player2Wrong: (state.player2Wrong + p2WrongDelta).clamp(0, 999),
+      streak: newStreak,
     );
   }
 

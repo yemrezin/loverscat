@@ -6,6 +6,7 @@ import '../../../custom_quiz/presentation/custom_questions_sheet.dart';
 import '../../../pet/domain/models/pet_avatar.dart';
 import '../../../pet/presentation/controllers/pet_providers.dart';
 import '../../../quiz/presentation/screens/quiz_play_screen.dart';
+import '../../../online/controllers/online_controller.dart';
 import '../controllers/map_providers.dart';
 import '../widgets/boat_sailing_dialog.dart';
 import '../widgets/snakes_ladders_board_widget.dart';
@@ -35,6 +36,8 @@ class _IslandMapScreenState extends ConsumerState<IslandMapScreen> {
         player1Name: couple.player1.name,
         player2Name: couple.player2.name,
       );
+      // Synchronize with remote partner if online
+      ref.read(onlineProvider.notifier).sendGameAction('step', {'playerNum': playerNum});
     } else if (steps == 0 && !mapState.isMoving) {
       _showQuizModePicker(context);
     }
@@ -132,6 +135,26 @@ class _IslandMapScreenState extends ConsumerState<IslandMapScreen> {
     final player1 = couple.player1;
     final player2 = couple.player2;
 
+    // Listen to remote partner game actions
+    ref.listen<OnlineState>(onlineProvider, (prev, next) {
+      final lastAction = next.lastGameAction;
+      if (lastAction != null && lastAction != prev?.lastGameAction) {
+        final actionType = lastAction['actionType'] as String?;
+        final actionData = lastAction['actionData'] as Map<String, dynamic>? ?? {};
+
+        if (actionType == 'step') {
+          final remotePlayer = actionData['playerNum'] as int? ?? 2;
+          mapNotifier.usePlayerStep(
+            remotePlayer,
+            player1Name: couple.player1.name,
+            player2Name: couple.player2.name,
+          );
+        } else if (actionType == 'sail') {
+          mapNotifier.sailToNextIsland();
+        }
+      }
+    });
+
     // Check for 10-island grand victory
     if (mapState.hasCompletedAll10Islands) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -209,6 +232,7 @@ class _IslandMapScreenState extends ConsumerState<IslandMapScreen> {
                 completedIsland: mapState.currentIsland,
                 onSailNext: () async {
                   await mapNotifier.sailToNextIsland();
+                  ref.read(onlineProvider.notifier).sendGameAction('sail', {});
                   if (context.mounted) {
                     Navigator.of(context).pop();
                   }

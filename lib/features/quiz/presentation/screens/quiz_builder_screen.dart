@@ -5,6 +5,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/utils/haptic_utils.dart';
 import '../../domain/models/question.dart';
 import '../controllers/quiz_providers.dart';
+import '../../../online/controllers/online_controller.dart';
 
 /// Screen allowing users to create their own couple quiz questions
 /// (Multiple-choice 4 options or Open-ended short text).
@@ -55,12 +56,31 @@ class _QuizBuilderScreenState extends ConsumerState<QuizBuilderScreen> {
     HapticUtils.medium();
 
     try {
+      final online = ref.read(onlineProvider);
+
+      if (online.isLoggedIn) {
+        final currentQuestions = await ref.read(onlineProvider.notifier).fetchCustomQuestions(online.user.username);
+        if (currentQuestions.length >= 5) {
+          _showToast('Her kullanıcı en fazla 5 soru ekleyebilir!');
+          setState(() => _isSaving = false);
+          return;
+        }
+
+        final success = await ref.read(onlineProvider.notifier).createCustomQuestion(questionText, options);
+        if (!success) {
+          _showToast(ref.read(onlineProvider).lastError ?? 'Soru kaydedilemedi.');
+          setState(() => _isSaving = false);
+          return;
+        }
+      }
+
       final newQuestion = QuizQuestion(
         id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
         text: questionText,
         type: _selectedType,
         options: options,
         isCustom: true,
+        author: online.user.username,
       );
 
       final repo = ref.read(quizRepositoryProvider);
@@ -86,6 +106,7 @@ class _QuizBuilderScreenState extends ConsumerState<QuizBuilderScreen> {
         setState(() => _isSaving = false);
       }
     }
+
   }
 
   void _showToast(String message) {

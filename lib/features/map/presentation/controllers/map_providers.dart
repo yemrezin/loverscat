@@ -427,3 +427,5 @@ final mapGameProvider = StateNotifierProvider<MapNotifier, MapState>((ref) {
   return MapNotifier();
 });
 
+final mapProvider = mapGameProvider;
+

@@ -25,12 +25,16 @@ class RoundAnswer {
   final String? player2OwnAnswer;
   final String? player1Guess;
   final String? player2Guess;
+  final bool? p1GuessJudgedCorrect;
+  final bool? p2GuessJudgedCorrect;
 
   const RoundAnswer({
     this.player1OwnAnswer,
     this.player2OwnAnswer,
     this.player1Guess,
     this.player2Guess,
+    this.p1GuessJudgedCorrect,
+    this.p2GuessJudgedCorrect,
   });
 
   bool get isPlayer1Sealed => (player1OwnAnswer?.trim().isNotEmpty ?? false);
@@ -41,6 +45,10 @@ class RoundAnswer {
   bool get isPlayer2Guessed => (player2Guess?.trim().isNotEmpty ?? false);
   bool get areBothGuessesMade => isPlayer1Guessed && isPlayer2Guessed;
 
+  bool get isP1Judged => p1GuessJudgedCorrect != null;
+  bool get isP2Judged => p2GuessJudgedCorrect != null;
+  bool get areBothJudged => isP1Judged && isP2Judged;
+
   /// Compares answers with trim and case-insensitivity.
   static bool areMatching(String? a, String? b) {
     if (a == null || b == null) return false;
@@ -50,22 +58,28 @@ class RoundAnswer {
   }
 
   /// Did Player 1 correctly guess Player 2's sealed answer?
-  bool get isP1GuessCorrect => areMatching(player1Guess, player2OwnAnswer);
+  /// For open-ended questions, manual judgment takes precedence.
+  bool get isP1GuessCorrect => p1GuessJudgedCorrect ?? areMatching(player1Guess, player2OwnAnswer);
 
   /// Did Player 2 correctly guess Player 1's sealed answer?
-  bool get isP2GuessCorrect => areMatching(player2Guess, player1OwnAnswer);
+  /// For open-ended questions, manual judgment takes precedence.
+  bool get isP2GuessCorrect => p2GuessJudgedCorrect ?? areMatching(player2Guess, player1OwnAnswer);
 
   RoundAnswer copyWith({
     String? player1OwnAnswer,
     String? player2OwnAnswer,
     String? player1Guess,
     String? player2Guess,
+    bool? p1GuessJudgedCorrect,
+    bool? p2GuessJudgedCorrect,
   }) {
     return RoundAnswer(
       player1OwnAnswer: player1OwnAnswer ?? this.player1OwnAnswer,
       player2OwnAnswer: player2OwnAnswer ?? this.player2OwnAnswer,
       player1Guess: player1Guess ?? this.player1Guess,
       player2Guess: player2Guess ?? this.player2Guess,
+      p1GuessJudgedCorrect: p1GuessJudgedCorrect ?? this.p1GuessJudgedCorrect,
+      p2GuessJudgedCorrect: p2GuessJudgedCorrect ?? this.p2GuessJudgedCorrect,
     );
   }
 

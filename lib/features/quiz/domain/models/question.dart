@@ -11,6 +11,7 @@ class QuizQuestion {
   final QuestionType type;
   final List<String> options;
   final bool isCustom;
+  final String? author;
 
   const QuizQuestion({
     required this.id,
@@ -18,6 +19,7 @@ class QuizQuestion {
     required this.type,
     this.options = const [],
     this.isCustom = false,
+    this.author,
   });
 
   bool get isMultipleChoice => type == QuestionType.multipleChoice;
@@ -29,6 +31,7 @@ class QuizQuestion {
     QuestionType? type,
     List<String>? options,
     bool? isCustom,
+    String? author,
   }) {
     return QuizQuestion(
       id: id ?? this.id,
@@ -36,6 +39,7 @@ class QuizQuestion {
       type: type ?? this.type,
       options: options ?? this.options,
       isCustom: isCustom ?? this.isCustom,
+      author: author ?? this.author,
     );
   }
 
@@ -46,6 +50,7 @@ class QuizQuestion {
       'type': type.name,
       'options': options,
       'isCustom': isCustom,
+      if (author != null) 'author': author,
     };
   }
 
@@ -59,8 +64,10 @@ class QuizQuestion {
       ),
       options: List<String>.from(map['options'] ?? []),
       isCustom: map['isCustom'] as bool? ?? false,
+      author: map['author'] as String?,
     );
   }
+
 
   @override
   bool operator ==(Object other) =>

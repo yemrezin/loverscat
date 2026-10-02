@@ -79,5 +79,41 @@ void main() {
       expect(reaction.type, CatReactionType.angelWings);
       expect(engine.countCorrectGuesses(round), 2);
     });
+
+    test('Open-ended question manual judgment overrides string mismatch', () {
+      // P1 answered "Paris tatili", P2 guessed "Fransa gezisi" (different strings)
+      // P1 explicitly judges P2's guess as correct
+      const round = RoundAnswer(
+        player1OwnAnswer: 'Paris tatili',
+        player2OwnAnswer: 'Deniz kenarı kamp',
+        player1Guess: 'Kamp yapmak',
+        player2Guess: 'Fransa gezisi',
+        p1GuessJudgedCorrect: true, // P2 judged P1's guess as correct
+        p2GuessJudgedCorrect: true, // P1 judged P2's guess as correct
+      );
+
+      expect(round.isP1GuessCorrect, isTrue);
+      expect(round.isP2GuessCorrect, isTrue);
+      final reaction = engine.evaluateReaction(round);
+      expect(reaction.type, CatReactionType.angelWings);
+      expect(engine.countCorrectGuesses(round), 2);
+    });
+
+    test('Open-ended question manual judgment can reject guess even if similar', () {
+      const round = RoundAnswer(
+        player1OwnAnswer: 'Mavi',
+        player2OwnAnswer: 'Kırmızı',
+        player1Guess: 'Kırmızı',
+        player2Guess: 'Açık Mavi',
+        p1GuessJudgedCorrect: false, // P2 decided it is wrong
+        p2GuessJudgedCorrect: false, // P1 decided it is wrong
+      );
+
+      expect(round.isP1GuessCorrect, isFalse);
+      expect(round.isP2GuessCorrect, isFalse);
+      final reaction = engine.evaluateReaction(round);
+      expect(reaction.type, CatReactionType.doublePawAngry);
+      expect(engine.countCorrectGuesses(round), 0);
+    });
   });
 }

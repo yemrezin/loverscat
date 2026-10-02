@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/presentation/screens/auth_screen.dart';
+import 'features/online/controllers/online_controller.dart';
 import 'features/quiz/presentation/screens/home_screen.dart';
 
 void main() async {
@@ -21,11 +23,13 @@ void main() async {
   );
 }
 
-class PawsAndUsApp extends StatelessWidget {
+class PawsAndUsApp extends ConsumerWidget {
   const PawsAndUsApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onlineState = ref.watch(onlineProvider);
+
     return MaterialApp(
       title: AppStrings.appName,
       debugShowCheckedModeBanner: false,
@@ -38,7 +42,7 @@ class PawsAndUsApp extends StatelessWidget {
           ),
         );
       },
-      home: const HomeScreen(),
+      home: onlineState.isLoggedIn ? const HomeScreen() : const AuthScreen(),
     );
   }
 }

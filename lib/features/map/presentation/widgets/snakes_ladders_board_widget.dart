@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../domain/models/island_board.dart';
 import '../../../pet/domain/models/pet_avatar.dart';
-import '../../../pet/presentation/widgets/pet_display_widget.dart';
 
 /// 10x10 Snakes and Ladders board:
 /// - Alternating lime green & yellow tiles
